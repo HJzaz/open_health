@@ -386,6 +386,12 @@ final class RingSync: ObservableObject {
     /// retry loop instead of silently giving up.
     func syncAutomaticallyIfNeeded(now: Date = Date(), background: Bool = false) async -> SyncReport? {
         guard AutoSyncPolicy.enabled, WorkCoordinator.shared.syncAvailable, !busy, let key = Keychain.loadKey() else { return nil }
+        // A background task uses its own RingSync instance; adopt its saved result
+        // so returning to the foreground does not start another two-hour sync early.
+        let persisted = UserDefaults.standard.double(forKey: Self.lastSuccessfulSyncKey)
+        if persisted > (lastSuccessfulSyncAt?.timeIntervalSince1970 ?? 0) {
+            lastSuccessfulSyncAt = Date(timeIntervalSince1970: persisted)
+        }
         let resuming = hasIncompleteSync
         if !resuming,
            let successful = lastSuccessfulSyncAt,
@@ -689,7 +695,8 @@ final class RingSync: ObservableObject {
             // BLETransport's notification stream is per-connection.
             let t = BLETransport(nameContains: "Oura",
                                  preferredPeripheralID: preferredPeripheralID,
-                                 excludedPeripheralIDs: excludedPeripherals)
+                                 excludedPeripheralIDs: excludedPeripherals,
+                                 backgroundScan: source == "background")
             transport = t
             do {
                 try await t.connect()
