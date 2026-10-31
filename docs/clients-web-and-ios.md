@@ -183,6 +183,11 @@ client re-derives packet timing at all — tracked as a follow-up.
 
 ## Known gaps (iOS-only, not yet on the web)
 
+- **Personal sideload build**: the optional GitHub IPA workflow uses a model-free
+  iPhone project without the HealthKit entitlement. Its build-specific Info.plist
+  disables Apple Health export; regular CI/TestFlight and web behavior are unchanged.
+
+
 Now on both: the model-free Symptom Radar (`symptoms`, used when the Python runner
 has no `illness`) and the ring-clock warnings (`clock.warnings`). Still iOS-only:
 
