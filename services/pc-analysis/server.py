@@ -160,6 +160,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--local-wifi', action='store_true', help='Allow trusted LAN access over unencrypted HTTP')
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--cli', type=Path, default=Path(__file__).with_name('oura.exe'))
     args = parser.parse_args()
@@ -169,9 +170,12 @@ def main():
     token = secrets.token_urlsafe(32)
     print('Open Health PC service. Keep this window open.', flush=True)
     print('Private connection code (changes on restart): ' + token, flush=True)
+    if args.local_wifi:
+        print('LOCAL WI-FI MODE: HTTP is not encrypted. Use only a trusted private network; do not forward this port.', flush=True)
+        print('Run ipconfig and use http://YOUR-PC-IPv4:8765 in the iPhone app with Local Wi-Fi enabled.', flush=True)
     print('In an Administrator terminal run: tailscale serve --bg http://127.0.0.1:' + str(args.port), flush=True)
     print('Use the HTTPS .ts.net URL printed by Tailscale in the iPhone app.', flush=True)
-    with Server(('127.0.0.1', args.port), token, cli, Path(__file__).resolve().parent) as server:
+    with Server(('0.0.0.0' if args.local_wifi else '127.0.0.1', args.port), token, cli, Path(__file__).resolve().parent) as server:
         server.serve_forever()
 
 
