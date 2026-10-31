@@ -478,3 +478,5 @@ app deletion or phone loss. Raw records are included; profiles and Keychain secr
 are not. Restore continues through the existing ring-manager file restore workflow.
 This automatic snapshot UI is iPhone-only; desktop data remains managed as local
 files. No health data is uploaded automatically by these features.
+
+Local PC transport (0.1.6): iOS optionally accepts RFC1918 IPv4 HTTP on port 8765 with explicit trusted Wi-Fi opt-in; Tailscale HTTPS remains the default. Local HTTP is unencrypted. Redirects remain blocked and the connection code is still required. This connection setup applies only to the iOS upload client, not the locally hosted web dashboard.
