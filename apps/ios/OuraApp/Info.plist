@@ -33,6 +33,8 @@
 	<array>
 		<string>org.hatemaljandali.openhealth.ring-refresh</string>
 	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict><key>NSAllowsLocalNetworking</key><true/></dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Connect to your own PC to analyze ring data when you choose.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
