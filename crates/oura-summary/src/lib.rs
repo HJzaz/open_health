@@ -12,6 +12,7 @@
 //! *render* it: web `dashboard/web/app.js`, iOS `apps/ios/OuraApp/OuraApp.swift`. See
 //! `docs/clients-web-and-ios.md`.
 
+pub mod personal_insights;
 pub mod hourly_hr;
 pub mod research_export;
 pub mod ring_time;
@@ -3098,7 +3099,9 @@ pub fn build_summary(
     clock_diag["undated_reasons"] = json!(undated_reasons_json);
     clock_diag["warnings"] = json!(clock_warnings);
 
+    let personal_insights = personal_insights::build(&nights_json, &ymd_label(now, tz));
     Ok(json!({
+        "personal_insights": personal_insights,
         "generated_at": now,
         "tz": tz,
         "digest": digest,

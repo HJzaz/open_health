@@ -1039,3 +1039,15 @@ body.page-open { overflow: hidden; }
   --spark: #69dbbd;
 }
 button, input, select { font-family: var(--sans); }
+
+/* Descriptive daily/weekly report: missing nights are labelled, never zero-filled. */
+.personal-daily { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 14px; margin: 18px 0; }
+.personal-observation { background: var(--surface-2); padding: 18px; border-radius: 18px; }
+.personal-observation p { margin: 10px 0; }
+#personal-insights small, .personal-method { color: var(--muted); }
+#personal-insights summary { padding: 12px 0; cursor: pointer; font-weight: 600; }
+.personal-table { overflow-x: auto; }
+.personal-table table { width: 100%; border-collapse: collapse; min-width: 540px; }
+.personal-table th, .personal-table td { padding: 14px 10px; text-align: left; border-bottom: 1px solid var(--line); }
+.personal-table td small { display: block; margin-top: 6px; }
+.personal-method { margin-top: 18px; font-size: 13px; }

@@ -768,6 +768,7 @@ final class RingSync: ObservableObject {
                 clearIncompleteSync()
                 dlog("sync", "OK run=\(runID) inserted=\(report.inserted) events=\(report.eventsSynced) cursor=\(report.nextCursor)")
                 status = "Sync complete."
+                if WorkCoordinator.shared.available { _ = await LocalBackups.shared.capture() }
                 return report
             } catch {
                 // the Rust layer packs the diagnostic detail (auth state, missing

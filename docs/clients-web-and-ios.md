@@ -458,3 +458,23 @@ measurement availability and the desktop dashboard's existing report layout stay
 same. Missing measurements remain empty, and the VO2 estimate is labelled as dependent
 on the saved profile. The simulator-only `-visualPreview` launch flag shows empty data
 for layout review without manufacturing personal readings or initiating ring sync.
+
+
+### Personal insights and on-device snapshots (0.1.5)
+
+`personal_insights::build` supplies one JSON contract to both clients. Daily text
+compares a recent main night with at least three earlier recorded nights in the
+preceding seven calendar days. Weekly averages compare today plus the preceding
+six days with the seven days before that; a displayed change requires three
+measurements per window. Missing, undated and future days are omitted, not zeroed.
+One longest period of at least three hours in bed is used per wake date. Time in
+bed is labelled as such, not as measured time asleep. These are descriptive
+comparisons, without diagnostic conclusions or claims about causes.
+
+The iPhone Backups & data screen adds protected, consistent SQLite snapshots after
+foreground sync, at most once per 24 hours, retaining the latest three. Export to
+Files is an explicit user action; snapshots inside the app cannot protect against
+app deletion or phone loss. Raw records are included; profiles and Keychain secrets
+are not. Restore continues through the existing ring-manager file restore workflow.
+This automatic snapshot UI is iPhone-only; desktop data remains managed as local
+files. No health data is uploaded automatically by these features.

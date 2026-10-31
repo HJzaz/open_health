@@ -12,6 +12,8 @@ struct DashboardOverview: View {
     let onDebt: () -> Void
     let onDay: (String, Bool) -> Void
     let onVital: (VitalKind) -> Void
+    @State private var showInsights = false
+    @State private var showBackups = false
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var greeting: String {
@@ -27,6 +29,7 @@ struct DashboardOverview: View {
             VStack(alignment: .leading, spacing: 24) {
                 header
                 DailyOverviewHero(s: s, ring: ring, onSync: onSync)
+                PersonalInsightsCard(insights: s.personalInsights) { showInsights = true }
                 vitals
                 if let day = s.days.first {
                     sectionTitle("Sleep & movement", detail: "Your latest day")
@@ -54,6 +57,10 @@ struct DashboardOverview: View {
                         }.foregroundStyle(Obs.ink).obsCard()
                     }.buttonStyle(.plain)
                 }
+                Button { showBackups = true } label: {
+                    Label("Backups & data", systemImage: "externaldrive.badge.checkmark")
+                        .font(.headline).foregroundStyle(Obs.ink).frame(maxWidth: .infinity, alignment: .leading).obsCard()
+                }.buttonStyle(.plain)
                 RingOverviewPanel(s: s, onSync: onSync)
             }
             .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 32)
@@ -61,6 +68,8 @@ struct DashboardOverview: View {
             .frame(maxWidth: .infinity)
         }
         .background(Obs.paper)
+        .sheet(isPresented: $showInsights) { PersonalInsightsView(insights: s.personalInsights) }
+        .sheet(isPresented: $showBackups) { BackupCenterView(ring: ring, onManage: onSync) }
     }
 
     private var header: some View {
