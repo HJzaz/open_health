@@ -46,6 +46,7 @@ struct PCAnalysisView: View {
     let profile: Profile?
     @AppStorage("pc.analysis.url") private var address = ""
     @State private var code = PCSecret.load()
+    @AppStorage("pc.analysis.localWifi") private var localWifi = false
     @State private var busy = false
     @State private var message = ""
     @State private var report: PCReport?
@@ -58,12 +59,13 @@ struct PCAnalysisView: View {
         NavigationStack {
             Form {
                 Section("Your Windows computer") {
-                    TextField("https://your-pc.your-tailnet.ts.net", text: $address)
+                    Toggle("Connect over trusted local Wi-Fi", isOn: $localWifi)
+                    TextField(localWifi ? "http://192.168.1.10:8765" : "https://your-pc.your-tailnet.ts.net", text: $address)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                         .keyboardType(.URL)
                     SecureField("PC connection code", text: $code)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    Text("Use the HTTPS address from Tailscale Serve and the code displayed by Start-Analysis. This is separate from your ring pairing key.")
+                    Text("For local Wi-Fi, run Start-Analysis-Local on your PC and enter its local IPv4 address with port 8765. Use only a trusted home network: local HTTP is not encrypted. Otherwise use Tailscale HTTPS. Enter the PC connection code below, separate from your ring key.")
                         .font(.footnote)
                 }
                 Section {
@@ -75,7 +77,7 @@ struct PCAnalysisView: View {
                     if busy { ProgressView() }
                     if !message.isEmpty { Text(message).font(.footnote) }
                 } footer: {
-                    Text("Sends a copy of your raw ring database and saved profile only when you tap Analyze. Your PC must be on, with Tailscale connected on both devices. Save your correct profile first. The PC deletes the temporary copy after processing.")
+                    Text("Sends a copy of your raw ring database and saved profile only when you tap Analyze. Your PC must be on. Use the same trusted Wi-Fi for local mode, or connect Tailscale on both devices. Save your correct profile first. The PC deletes the temporary copy after processing.")
                 }
                 .disabled(busy)
                 if let report {
@@ -114,19 +116,29 @@ struct PCAnalysisView: View {
         }
     }
 
+    private static func allowedEndpoint(_ url: URLComponents, host: String, local: Bool) -> Bool {
+        if !local { return url.scheme == "https" && host.lowercased().hasSuffix(".ts.net") && (url.port == nil || url.port == 443) }
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return false }
+        let numbers = parts.compactMap { Int($0) }
+        guard numbers.count == 4, numbers.allSatisfy({ (0...255).contains($0) }),
+              zip(parts, numbers).allSatisfy({ String($0.1) == String($0.0) }) else { return false }
+        let privateAddress = numbers[0] == 10 || (numbers[0] == 172 && (16...31).contains(numbers[1])) || (numbers[0] == 192 && numbers[1] == 168)
+        return privateAddress && url.scheme == "http" && url.port == 8765
+    }
+
     private func request(analyze: Bool) async {
         guard !busy else { return }
         busy = true
         defer { busy = false }
         do {
             guard let base = URLComponents(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
-                  base.scheme == "https", let host = base.host,
-                  host.lowercased().hasSuffix(".ts.net"),
+                  let host = base.host,
+                  Self.allowedEndpoint(base, host: host, local: localWifi),
                   base.user == nil, base.password == nil,
-                  base.port == nil || base.port == 443,
                   base.query == nil, base.fragment == nil,
                   base.path.isEmpty || base.path == "/" else {
-                throw PCError.message("Enter your PC's HTTPS .ts.net address, without a path.")
+                throw PCError.message("Enter a private IPv4 HTTP address with port 8765 in local Wi-Fi mode, or your HTTPS .ts.net address.")
             }
             let secret = code.trimmingCharacters(in: .whitespacesAndNewlines)
             guard secret.count >= 32, !secret.contains("\n"), !secret.contains("\r") else {
