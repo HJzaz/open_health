@@ -447,3 +447,14 @@ The web BLE actions (sync, live HR, feature mode) share one operation gate. Live
 HR drains stderr concurrently, retains only a bounded tail, and kills/reaps a
 stalled or disconnected child before releasing the gate. Hardware/firmware live
 HR support still depends on the pinned BLE implementation.
+
+### Open Health visual refresh (0.1.4)
+
+Both clients share the navy/mint palette, layered surfaces, softer card corners and
+system headings. The iPhone home additionally uses a first-night overview, an actual
+battery gauge, four accessible vital cards, a prominent PC report entry and collapsed
+device diagnostics. This mobile composition is intentionally iOS-only; calculations,
+measurement availability and the desktop dashboard's existing report layout stay the
+same. Missing measurements remain empty, and the VO2 estimate is labelled as dependent
+on the saved profile. The simulator-only `-visualPreview` launch flag shows empty data
+for layout review without manufacturing personal readings or initiating ring sync.

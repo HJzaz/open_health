@@ -101,6 +101,9 @@ struct PCAnalysisView: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Obs.paper)
+            .tint(Obs.good)
             .navigationTitle("PC analysis")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .task {
