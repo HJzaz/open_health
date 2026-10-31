@@ -204,7 +204,7 @@ private struct DailyOverviewHero: View {
                 Spacer(minLength: 0)
                 Button(action: onSync) {
                     Label("Sync", systemImage: "arrow.up.right").font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Obs.paper).padding(.horizontal, 15).padding(.vertical, 10)
+                        .foregroundStyle(Obs.onAccent).padding(.horizontal, 15).frame(minHeight: 44)
                         .background(Obs.good, in: Capsule())
                 }.buttonStyle(.plain)
             }
@@ -292,7 +292,7 @@ private struct RingOverviewPanel: View {
                         .font(.caption).foregroundStyle(Obs.muted)
                 }
                 Spacer()
-                Button("Manage", action: onSync).font(.subheadline.weight(.semibold)).foregroundStyle(Obs.good)
+                Button("Manage", action: onSync).font(.subheadline.weight(.semibold)).foregroundStyle(Obs.good).frame(minHeight: 44)
             }
             DisclosureGroup("Device & diagnostics") {
                 VStack(spacing: 12) {

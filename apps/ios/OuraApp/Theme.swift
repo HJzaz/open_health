@@ -17,6 +17,7 @@ enum Obs {
         })
     }
 
+    static let onAccent = adaptive(light: 0xffffff, dark: 0x090f1c)
     static let surface = adaptive(light: 0xffffff, dark: 0x141e30)
     static let elevated = adaptive(light: 0xe9f1fa, dark: 0x1b2940)
     static let lavender = adaptive(light: 0x7160bd, dark: 0xb8a9f6)

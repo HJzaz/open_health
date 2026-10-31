@@ -30,7 +30,7 @@ jobs:
           bash apps/ios/build-xcframework.sh
           cd apps/ios/OuraApp
           xcodegen generate --spec project-ci.yml
-          xcodebuild build -project OuraApp.xcodeproj -scheme OuraApp -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/visual-build" CODE_SIGNING_ALLOWED=NO PRODUCT_BUNDLE_IDENTIFIER=org.hatemaljandali.openhealth
+          xcodebuild build -project OuraApp.xcodeproj -scheme OuraApp -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/visual-build" CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES PRODUCT_BUNDLE_IDENTIFIER=org.hatemaljandali.openhealth
       - name: Render native screens
         run: |
           set -euo pipefail
