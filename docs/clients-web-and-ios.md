@@ -183,6 +183,13 @@ client re-derives packet timing at all — tracked as a follow-up.
 
 ## Known gaps (iOS-only, not yet on the web)
 
+- **Two-hour ring auto-sync (iOS)**: foreground due checks and best-effort
+  BGAppRefresh requests. Only an OS-granted sync lease bypasses the foreground
+  BLE guard; model analysis still requires the foreground. Expiration pauses the
+  incremental drain. The web does not schedule phone Bluetooth work. Background
+  execution and protected-data access are not guaranteed by iOS.
+
+
 - **PC analysis connection (iOS)** uploads an explicit database snapshot and saved
   profile to the private Windows gateway, then displays a separately timestamped
   report. The gateway invokes `oura analyze`, which reuses the web dashboard's

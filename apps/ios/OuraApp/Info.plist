@@ -27,6 +27,11 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>org.hatemaljandali.openhealth.ring-refresh</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Connect to your own PC to analyze ring data when you choose.</string>

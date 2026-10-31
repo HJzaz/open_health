@@ -96,6 +96,7 @@ private enum HealthProfileImporter {
 struct ProfileSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var profile: EditableProfile
+    @AppStorage("ring.auto-sync.enabled") private var autoSync = true
     @State private var importing = false
     @State private var message: String?
     @ObservedObject private var health = HealthExport.shared
@@ -109,6 +110,12 @@ struct ProfileSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Toggle("Auto-sync every two hours", isOn: $autoSync)
+                        .onChange(of: autoSync) { _, _ in BackgroundRingSync.schedule() }
+                } footer: {
+                    Text("Checks while this app is open and requests background refresh from iOS. Background timing is not guaranteed; Bluetooth, ring proximity and protected-data access are required. Manual sync always remains available.")
+                }
                 Section {
                     Picker("Biological sex", selection: $profile.sex) {
                         Text("Female").tag("F")

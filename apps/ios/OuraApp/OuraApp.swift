@@ -855,6 +855,16 @@ struct RootView: View {
         .fullScreenCover(item: $report) { sel in if let s { DayReportView(s: s, day: sel.day, tab: sel.sleep ? .sleep : .activity) } }
         .sheet(isPresented: $showAllDays) { if let s { AllDaysView(s: s) } }
         .onAppear(perform: applyLaunchArguments)
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                guard !Task.isCancelled else { break }
+                if scenePhase == .active, AutoSyncPolicy.enabled,
+                   AutoSyncPolicy.isDue(lastSuccess: ring.lastSuccessfulSyncAt), !ring.busy {
+                    requestAutomaticSync()
+                }
+            }
+        }
         .sheet(isPresented: $showSync) {
             SyncView(ring: ring, onSynced: refreshAfterSync, onReset: resetAndReload)
         }
@@ -870,6 +880,7 @@ struct RootView: View {
             // A cached summary makes launch immediate; this forced load replaces it
             // with SQLite + model output without blanking the existing Today card.
             requestAutomaticSync()
+            BackgroundRingSync.schedule()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in
             requestAutomaticSync()
@@ -879,6 +890,7 @@ struct RootView: View {
                 requestAutomaticSync()
             } else if phase == .background {
                 WorkCoordinator.shared.invalidateAnalysis()
+                BackgroundRingSync.schedule()
             }
         }
     }
@@ -1280,6 +1292,9 @@ struct BuildStamp: View {
 
 @main
 struct OuraApp: App {
-    init() { DiagStore.shared.bootstrap() }
+    init() {
+        DiagStore.shared.bootstrap()
+        BackgroundRingSync.register()
+    }
     var body: some Scene { WindowGroup { RootView() } }
 }

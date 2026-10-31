@@ -321,7 +321,7 @@ final class RingSync: ObservableObject {
 
     /// A launch/foreground refresh is useful, but reconnecting twice while someone
     /// briefly switches apps is not. Manual sync remains available at any time.
-    static let automaticSyncCooldown: TimeInterval = 3 * 60
+    static let automaticSyncCooldown: TimeInterval = AutoSyncPolicy.interval
     private static let lastSuccessfulSyncKey = "ring.last-successful-sync-at"
     // Set the moment a drain reports real progress, cleared only on a completed
     // sync — so it survives an app kill mid-drain and distinguishes "interrupted
@@ -364,6 +364,8 @@ final class RingSync: ObservableObject {
             lifecycleObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in
                     guard let self, self.busy else { return }
+                    if name == UIApplication.didEnterBackgroundNotification,
+                       WorkCoordinator.shared.backgroundSyncAllowed { return }
                     WorkCoordinator.shared.beginCleanup()
                     self.pause()
                 }
@@ -382,8 +384,8 @@ final class RingSync: ObservableObject {
     /// when the last sync was interrupted mid-drain, the checkpointed cursor means
     /// data is sitting half-transferred on the ring, so resume eagerly with the
     /// retry loop instead of silently giving up.
-    func syncAutomaticallyIfNeeded(now: Date = Date()) async -> SyncReport? {
-        guard WorkCoordinator.shared.available, !busy, let key = Keychain.loadKey() else { return nil }
+    func syncAutomaticallyIfNeeded(now: Date = Date(), background: Bool = false) async -> SyncReport? {
+        guard AutoSyncPolicy.enabled, WorkCoordinator.shared.syncAvailable, !busy, let key = Keychain.loadKey() else { return nil }
         let resuming = hasIncompleteSync
         if !resuming,
            let successful = lastSuccessfulSyncAt,
@@ -397,8 +399,8 @@ final class RingSync: ObservableObject {
         lastAutomaticAttemptAt = now
         if resuming { status = "Resuming sync…" }
         return await run(keyHex: key,
-                         maxAttempts: resuming ? 3 : 1,
-                         source: resuming ? "resume" : "automatic")
+                         maxAttempts: background ? 1 : (resuming ? 3 : 1),
+                         source: background ? "background" : (resuming ? "resume" : "automatic"))
     }
 
     func resetLocalDatabase() async -> Bool {
@@ -634,13 +636,13 @@ final class RingSync: ObservableObject {
             status = "key must be 32 hex characters"
             return nil
         }
-        guard WorkCoordinator.shared.available else { status = "Sync paused. Open the app to resume."; return nil }
+        guard WorkCoordinator.shared.syncAvailable else { status = "Sync paused. Open the app to resume."; return nil }
         busy = true
         paused = false
         WorkCoordinator.shared.invalidateAnalysis()
         await WorkGate.shared.acquire()
         defer { Task { await WorkGate.shared.release() }; WorkCoordinator.shared.endCleanup() }
-        guard !paused, WorkCoordinator.shared.available else { busy = false; return nil }
+        guard !paused, WorkCoordinator.shared.syncAvailable else { busy = false; return nil }
         markedIncompleteThisRun = false
         // A multi-hour first sync must not die because the screen locked; SyncView
         // refreshes this when the app becomes active again.
@@ -666,7 +668,7 @@ final class RingSync: ObservableObject {
         var attempt = 1
         var totalBudget = max(1, maxAttempts)
         while attempt <= totalBudget {
-            if paused || Task.isCancelled || !WorkCoordinator.shared.available { status = "Sync paused. Return to the app to resume."; return nil }
+            if paused || Task.isCancelled || !WorkCoordinator.shared.syncAvailable { status = "Sync paused. Return to the app to resume."; return nil }
             attemptID = UUID().uuidString
             dlog("sync", "attempt=\(attempt) id=\(attemptID) run=\(runID)")
             if attempt > 1 {
@@ -676,7 +678,7 @@ final class RingSync: ObservableObject {
                     status = "Connection lost. Retrying (\(attempt) of \(totalBudget))…"
                 }
                 do { try await Task.sleep(nanoseconds: delayNs) } catch { return nil }
-                guard !paused, WorkCoordinator.shared.available else { return nil }
+                guard !paused, WorkCoordinator.shared.syncAvailable else { return nil }
             }
 
             if excludedPeripherals.isEmpty {

@@ -62,3 +62,17 @@ pairing or data accuracy. Those require testing with the actual iPhone and ring.
 Download the newer IPA and Windows analysis package from their successful Actions
 runs. See `services/pc-analysis/README.md` for private Tailscale HTTPS setup.
 Install the update over the existing app; do not delete it or reset your ring.
+
+## Two-hour ring auto-sync
+
+Profile contains an auto-sync toggle, enabled by default. While the app is open it
+checks once a minute and syncs when two hours have elapsed since a successful sync.
+Opening the app also attempts an overdue sync; manual sync remains available.
+
+The app requests iOS Background App Refresh with a two-hour earliest start date.
+This is **best effort**, not an alarm: iOS decides whether/when it runs. Bluetooth,
+ring proximity and protected-data availability are required; a locked phone may
+prevent access to the saved ring key/database. Enable Background App Refresh in
+iPhone Settings, and avoid force-quitting the app if you want background attempts.
+An expired task pauses safely so the incremental checkpoint can resume later.
+Auto-sync collects ring data locally; it does not automatically upload to the PC.
