@@ -807,6 +807,7 @@ struct RootView: View {
     @State private var showAllDays = false
     @State private var showSync = false
     @State private var showProfile = false
+    @State private var showPCAnalysis = false
     @State private var showSleepDebt = false
     @State private var vital: VitalKind?
     @State private var loadGeneration = 0
@@ -857,6 +858,7 @@ struct RootView: View {
         .sheet(isPresented: $showSync) {
             SyncView(ring: ring, onSynced: refreshAfterSync, onReset: resetAndReload)
         }
+        .sheet(isPresented: $showPCAnalysis) { PCAnalysisView(ring: ring, profile: s?.profile) }
         .sheet(isPresented: $showProfile) { ProfileSettingsView(profile: s?.profile, onSaved: refreshDerivedData) }
         .sheet(isPresented: $showSleepDebt) { if let debt = s?.sleepDebt { SleepDebtDetail(debt: debt) } }
         .sheet(item: $vital) { kind in if let s { VitalTrendView(s: s, kind: kind) } }
@@ -1049,6 +1051,10 @@ struct RootView: View {
                         Text("Open Oura").font(Obs.serif(22)).foregroundStyle(Obs.ink)
                         Text("beta").font(Obs.mono(9, .medium)).tracking(1.2).foregroundStyle(Obs.muted)
                         Spacer()
+                        Button { showPCAnalysis = true } label: {
+                            Image(systemName: "desktopcomputer")
+                                .font(.system(size: 17)).foregroundStyle(Obs.ink2)
+                        }.accessibilityLabel("PC analysis")
                         Button { showProfile = true } label: {
                             Image(systemName: "person.crop.circle")
                                 .font(.system(size: 17)).foregroundStyle(Obs.ink2)

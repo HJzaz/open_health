@@ -39,7 +39,8 @@ private struct HealthProfile {
 
 private enum HealthProfileImporter {
     static func load(completion: @escaping (Result<HealthProfile, Error>) -> Void) {
-        guard HKHealthStore.isHealthDataAvailable() else {
+        guard Bundle.main.object(forInfoDictionaryKey: "OpenOuraHealthExportDisabled") as? Bool != true,
+              HKHealthStore.isHealthDataAvailable() else {
             completion(.failure(NSError(domain: "open_oura", code: 1,
                                         userInfo: [NSLocalizedDescriptionKey: "Apple Health is unavailable on this device."])))
             return

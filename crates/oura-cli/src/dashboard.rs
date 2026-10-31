@@ -280,7 +280,7 @@ fn merge_sleep_fallback(python: Option<Value>, signals: Option<Value>) -> Option
 }
 
 /// `build_summary` for the web dashboard — runs the models via Python.
-fn build_summary(db: &Path, tz: f64) -> Result<Value> {
+pub(crate) fn build_summary(db: &Path, tz: f64) -> Result<Value> {
     oura_summary::build_summary(db, tz, &PythonRunner)
 }
 

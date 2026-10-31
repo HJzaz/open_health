@@ -56,3 +56,9 @@ separate, informed decision.
 
 The IPA building successfully verifies compilation and packaging, **not** BLE
 pairing or data accuracy. Those require testing with the actual iPhone and ring.
+
+## Optional Windows analysis connection
+
+Download the newer IPA and Windows analysis package from their successful Actions
+runs. See `services/pc-analysis/README.md` for private Tailscale HTTPS setup.
+Install the update over the existing app; do not delete it or reset your ring.

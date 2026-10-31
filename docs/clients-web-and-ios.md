@@ -183,6 +183,14 @@ client re-derives packet timing at all — tracked as a follow-up.
 
 ## Known gaps (iOS-only, not yet on the web)
 
+- **PC analysis connection (iOS)** uploads an explicit database snapshot and saved
+  profile to the private Windows gateway, then displays a separately timestamped
+  report. The gateway invokes `oura analyze`, which reuses the web dashboard's
+  `PythonRunner` and shared `build_summary`; calculations are not duplicated.
+  The web already runs this pipeline locally, so it needs no upload UI. Private
+  model weights are still absent; signal fallback stages are estimates.
+
+
 - **Personal sideload build**: the optional GitHub IPA workflow uses a model-free
   iPhone project without the HealthKit entitlement. Its build-specific Info.plist
   disables Apple Health export; regular CI/TestFlight and web behavior are unchanged.
