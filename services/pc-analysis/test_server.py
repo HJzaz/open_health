@@ -1,3 +1,4 @@
+from contextlib import closing
 import base64
 import http.client
 import json
@@ -80,7 +81,7 @@ class GatewayTests(unittest.TestCase):
 
     def test_engine_command_is_offline_and_shell_free(self):
         db = Path(self.temp.name)/'ring.db'
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn:
             conn.execute('CREATE TABLE events (id INTEGER)')
         def execute(args, **kwargs):
             self.assertEqual(args[1:], ['--db', str(db), 'analyze', '--tz-offset', '3'])
