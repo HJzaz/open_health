@@ -683,7 +683,7 @@ final class RingSync: ObservableObject {
         var connectedDuringRun = source == "resume"
         var excludedPeripherals = Set<UUID>()
         var attempt = 1
-        var totalBudget = max(1, maxAttempts)
+        let totalBudget = max(1, maxAttempts)
         while attempt <= totalBudget {
             if paused || Task.isCancelled || !WorkCoordinator.shared.syncAvailable { status = "Sync paused. Return to the app to resume."; return nil }
             attemptID = UUID().uuidString
@@ -817,7 +817,7 @@ final class RingSync: ObservableObject {
                         if badID == preferredPeripheralID {
                             UserDefaults.standard.removeObject(forKey: Self.preferredPeripheralKey)
                         }
-                        totalBudget = max(totalBudget, attempt + 1)
+                        // Keep the fixed attempt budget even when another nearby ring answers.
                         dlog("sync", "ring id=\(badID.uuidString.suffix(12)) rejected auth key; excluding and scanning for another nearby ring")
                         status = "Another Oura ring answered first; scanning for your paired ring…"
                         attempt += 1
