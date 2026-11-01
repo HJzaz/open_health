@@ -480,3 +480,15 @@ This automatic snapshot UI is iPhone-only; desktop data remains managed as local
 files. No health data is uploaded automatically by these features.
 
 Local PC transport (0.1.6): iOS optionally accepts RFC1918 IPv4 HTTP on port 8765 with explicit trusted Wi-Fi opt-in; Tailscale HTTPS remains the default. Local HTTP is unencrypted. Redirects remain blocked and the connection code is still required. This connection setup applies only to the iOS upload client, not the locally hosted web dashboard.
+
+### Battery-conscious iPhone sync (0.1.7)
+Automatic attempts share a persisted two-hour cooldown (including interruptions) and
+a 12-attempt rolling-day cap. Each automatic run makes one attempt; manual runs
+make at most two, with 90-second automatic and ten-minute manual run limits.
+Sleep processing requests are limited to once in six hours and, for automatic
+runs, local hours 06:00–17:59. Incremental downloads still run independently.
+Pull-to-refresh on the native home scroll view awaits manual sync and reloads
+new data; it uses the existing sync status indicator. Connection duration and
+disconnect-request time are logged; these do not prove radio disconnect completion.
+This scheduling/gesture applies only to the iPhone BLE client. Desktop sync keeps
+its existing behavior; no shared measurement calculations changed.

@@ -11,6 +11,20 @@ enum AutoSyncPolicy {
         guard let lastSuccess else { return true }
         return now.timeIntervalSince(lastSuccess) >= interval
     }
+    static let lastAttemptKey = "ring.auto-sync.last-attempt"
+    static let windowKey = "ring.auto-sync.window"
+    static let countKey = "ring.auto-sync.count"
+    static let maximumAttempts = 12
+    static func mayAttempt(lastSuccess: Date?, lastAttempt: Date?, windowStart: Date?, count: Int, now: Date) -> Bool {
+        guard isDue(lastSuccess: lastSuccess, now: now) else { return false }
+        if let lastAttempt, now.timeIntervalSince(lastAttempt) < interval { return false }
+        if let windowStart, now.timeIntervalSince(windowStart) < 86400, count >= maximumAttempts { return false }
+        return true
+    }
+    static func shouldRequestSleep(lastRequest: Date?, now: Date, hour: Int, manual: Bool) -> Bool {
+        guard manual || (6..<18).contains(hour) else { return false }
+        return lastRequest.map { now.timeIntervalSince($0) >= 6 * 3600 } ?? true
+    }
     static func nextDate(lastSuccess: Date?, now: Date = Date()) -> Date {
         max(now.addingTimeInterval(60), (lastSuccess ?? now).addingTimeInterval(interval))
     }
@@ -33,7 +47,15 @@ enum BackgroundRingSync {
         let timestamp = UserDefaults.standard.double(forKey: "ring.last-successful-sync-at")
         let last = timestamp > 0 ? Date(timeIntervalSince1970: timestamp) : nil
         let request = BGAppRefreshTaskRequest(identifier: identifier)
-        request.earliestBeginDate = AutoSyncPolicy.nextDate(lastSuccess: last)
+        var due = AutoSyncPolicy.nextDate(lastSuccess: last)
+        let defaults = UserDefaults.standard
+        let attempted = defaults.double(forKey: AutoSyncPolicy.lastAttemptKey)
+        if attempted > 0 { due = max(due, Date(timeIntervalSince1970: attempted).addingTimeInterval(AutoSyncPolicy.interval)) }
+        let window = defaults.double(forKey: AutoSyncPolicy.windowKey)
+        if window > 0, defaults.integer(forKey: AutoSyncPolicy.countKey) >= AutoSyncPolicy.maximumAttempts {
+            due = max(due, Date(timeIntervalSince1970: window).addingTimeInterval(86400))
+        }
+        request.earliestBeginDate = due
         do {
             try BGTaskScheduler.shared.submit(request)
         } catch {

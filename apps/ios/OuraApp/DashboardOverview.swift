@@ -6,6 +6,7 @@ struct DashboardOverview: View {
     @ObservedObject var ring: RingSync
     let analyzing: Bool
     let onSync: () -> Void
+    let onRefresh: () async -> Void
     let onPC: () -> Void
     let onProfile: () -> Void
     let onHistory: () -> Void
@@ -67,6 +68,7 @@ struct DashboardOverview: View {
             .frame(maxWidth: 720)
             .frame(maxWidth: .infinity)
         }
+        .refreshable { await onRefresh() }
         .background(Obs.paper)
         .sheet(isPresented: $showInsights) { PersonalInsightsView(insights: s.personalInsights) }
         .sheet(isPresented: $showBackups) { BackupCenterView(ring: ring, onManage: onSync) }

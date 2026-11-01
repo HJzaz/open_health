@@ -551,6 +551,15 @@ impl RingSession {
         key_hex: String,
         progress: Box<dyn SyncProgressListener>,
     ) -> Result<SyncReport, SyncError> {
+        self.sync_with_options(db_path, key_hex, true, progress).await
+    }
+
+    /// Sync with optional ring-side sleep processing; callers can throttle this
+    /// independently from incremental history retrieval.
+    pub async fn sync_with_options(
+        &self, db_path: String, key_hex: String, request_sleep_analysis: bool,
+        progress: Box<dyn SyncProgressListener>,
+    ) -> Result<SyncReport, SyncError> {
         let mut stop = self.stop.subscribe();
         if let Some(reason) = stop.borrow().clone() {
             return Err(SyncError::Interrupted { reason });
@@ -559,7 +568,7 @@ impl RingSession {
             biased;
             _ = stop.changed() => Err(SyncError::Interrupted {
                 reason: stop.borrow().clone().unwrap_or_else(|| "cancelled".into()) }),
-            result = self.sync_inner(db_path, key_hex, progress) => result,
+            result = self.sync_inner(db_path, key_hex, request_sleep_analysis, progress) => result,
         }
     }
 
@@ -710,6 +719,7 @@ impl RingSession {
         &self,
         db_path: String,
         key_hex: String,
+        request_sleep_analysis: bool,
         progress: Box<dyn SyncProgressListener>,
     ) -> Result<SyncReport, SyncError> {
         let fail = |e: String| SyncError::Failed(e);
@@ -746,7 +756,10 @@ impl RingSession {
         // it postprocesses a sleep — not while it is recording one. Triggering it here
         // gives the ring the whole drain to finish, so a fast postprocess lands in this
         // sync rather than the next. Fire-and-forget: a refusal is not a sync failure.
-        let _ = client.check_sleep_analysis(false).await;
+        if request_sleep_analysis {
+            progress.on_progress("sleep-request".into(), 0, 0);
+            let _ = client.check_sleep_analysis(false).await;
+        }
         let serial = client.serial().await.unwrap_or_else(|_| "unknown".into());
         let info = client.firmware().await.ok();
 

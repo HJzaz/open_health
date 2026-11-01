@@ -14,8 +14,8 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.1.6"
-    CURRENT_PROJECT_VERSION: "46"
+    MARKETING_VERSION: "0.1.7"
+    CURRENT_PROJECT_VERSION: "47"
     PRODUCT_BUNDLE_IDENTIFIER: md.thomas.openoura
     TARGETED_DEVICE_FAMILY: "1"   # iPhone only (no iPad multitasking orientation reqs)
     CODE_SIGN_STYLE: Automatic

@@ -1048,6 +1048,9 @@ struct RootView: View {
                 if !run.isCancelled, WorkCoordinator.shared.available {
                     if full.error == nil {
                         s = full
+                        if let device = full.device {
+                            dlog("battery", "summary battery=\(device.battery_pct.map(String.init) ?? "unknown")% recorded=\(device.battery_recorded ?? "unknown") \(device.battery_recorded_hm ?? "") loadedAt=\(Date().timeIntervalSince1970)")
+                        }
                         SummaryCache.save(full)
                         HealthExport.shared.push(full)
                     } else if s == nil { s = full }
@@ -1064,7 +1067,13 @@ struct RootView: View {
 
     private func content(_ s: Summary) -> some View {
         DashboardOverview(s: s, ring: ring, analyzing: isRefreshingSummary,
-            onSync: { showSync = true }, onPC: { showPCAnalysis = true },
+            onSync: { showSync = true }, onRefresh: {
+                guard !ring.busy, WorkCoordinator.shared.syncAvailable else { return }
+                guard let key = Keychain.loadKey() else { showSync = true; return }
+                if let result = await ring.run(keyHex: key, source: "pull-to-refresh") {
+                    refreshAfterSync(result)
+                }
+            }, onPC: { showPCAnalysis = true },
             onProfile: { showProfile = true }, onHistory: { showAllDays = true },
             onDebt: { showSleepDebt = true },
             onDay: { day, sleep in report = ReportSel(day: day, sleep: sleep) },
