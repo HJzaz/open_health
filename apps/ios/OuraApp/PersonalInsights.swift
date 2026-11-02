@@ -1,6 +1,20 @@
 import SwiftUI
 
 struct PersonalInsights: Codable {
+    struct BaselineModel: Codable {
+        struct Observation: Codable, Identifiable {
+            let id: String
+            let title: String
+            let message: String
+            let date: String
+            let baseline_nights: Int
+        }
+        let message: String
+        let method: String
+        let baseline_nights: Int
+        let observations: [Observation]
+    }
+    let local_model: BaselineModel?
     let as_of: String
     let latest_night: String?
     let daily: [DailyObservation]
@@ -52,14 +66,18 @@ struct PersonalInsightsCard: View {
                     Spacer()
                     Image(systemName: "chevron.right").font(.caption).foregroundStyle(Obs.muted)
                 }
-                if let first = insights?.daily.first {
+                if let model = insights?.local_model, !model.observations.isEmpty {
+                    Text("\(model.observations.count) changes from your baseline to review")
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(Obs.ink)
+                    Text(model.observations[0].message).font(.subheadline).foregroundStyle(Obs.ink2)
+                } else if let first = insights?.daily.first {
                     Text(first.message).font(.subheadline).foregroundStyle(Obs.ink2)
                     Text("From the night ending \(first.date)").font(.caption).foregroundStyle(Obs.muted)
                 } else {
                     Text(insights?.message ?? "Sync an overnight recording to begin your daily insights.")
                         .font(.subheadline).foregroundStyle(Obs.ink2)
                 }
-                Text("Daily insights & weekly trends").font(.subheadline.weight(.semibold)).foregroundStyle(Obs.good)
+                Text("On-device analysis · insights & trends").font(.subheadline.weight(.semibold)).foregroundStyle(Obs.good)
             }.frame(maxWidth: .infinity, alignment: .leading).obsCard()
         }.buttonStyle(.plain)
     }
@@ -78,6 +96,21 @@ struct PersonalInsightsView: View {
                         Text("Weekly trends").tag(1)
                     }.pickerStyle(.segmented)
                     if let insights {
+                        if let model = insights.local_model {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("Personal baseline review", systemImage: "waveform.path.ecg").font(.headline)
+                                Text("Calculated on this iPhone after sync. No PC or account required.").font(.caption).foregroundStyle(Obs.muted)
+                                Text(model.message).font(.subheadline)
+                                ForEach(model.observations) { observation in
+                                    Divider()
+                                    Text(observation.title).font(.headline)
+                                    Text(observation.message).font(.subheadline)
+                                    Text("Night ending \(observation.date) · \(observation.baseline_nights) baseline nights").font(.caption).foregroundStyle(Obs.muted)
+                                }
+                                Text("Wellness observations, not medical warnings. If you feel unwell or changes persist, speak with a healthcare professional; do not rely on this screen to decide whether you need care.").font(.footnote).foregroundStyle(Obs.ink2)
+                                DisclosureGroup("How the model works") { Text(model.method).font(.caption) }
+                            }.foregroundStyle(Obs.ink).frame(maxWidth: .infinity, alignment: .leading).obsCard()
+                        }
                         Text("As of \(insights.as_of)").font(.caption).foregroundStyle(Obs.muted)
                         if page == 0 {
                             Text(insights.message).font(.subheadline).foregroundStyle(Obs.ink2)

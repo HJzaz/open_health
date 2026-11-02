@@ -30,8 +30,8 @@ schemes:
 
 settings:
   base:
-    MARKETING_VERSION: "0.1.7"
-    CURRENT_PROJECT_VERSION: "47"
+    MARKETING_VERSION: "0.1.8"
+    CURRENT_PROJECT_VERSION: "48"
     PRODUCT_BUNDLE_IDENTIFIER: md.thomas.openoura
     TARGETED_DEVICE_FAMILY: "1"   # iPhone only (no iPad multitasking orientation reqs)
     CODE_SIGN_STYLE: Automatic
@@ -88,7 +88,6 @@ targets:
       - path: BLETransport.swift
       - path: RingSync.swift
       - path: AutoSync.swift
-      - path: PCAnalysis.swift
       - path: ProfileSettings.swift
       - path: EventStore.swift
       - path: ModelCache.swift

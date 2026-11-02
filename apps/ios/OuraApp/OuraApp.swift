@@ -815,7 +815,6 @@ struct RootView: View {
     @State private var showAllDays = false
     @State private var showSync = false
     @State private var showProfile = false
-    @State private var showPCAnalysis = false
     @State private var showSleepDebt = false
     @State private var vital: VitalKind?
     @State private var loadGeneration = 0
@@ -876,7 +875,6 @@ struct RootView: View {
         .sheet(isPresented: $showSync) {
             SyncView(ring: ring, onSynced: refreshAfterSync, onReset: resetAndReload)
         }
-        .sheet(isPresented: $showPCAnalysis) { PCAnalysisView(ring: ring, profile: s?.profile) }
         .sheet(isPresented: $showProfile) { ProfileSettingsView(profile: s?.profile, onSaved: refreshDerivedData) }
         .sheet(isPresented: $showSleepDebt) { if let debt = s?.sleepDebt { SleepDebtDetail(debt: debt) } }
         .sheet(item: $vital) { kind in if let s { VitalTrendView(s: s, kind: kind) } }
@@ -1073,7 +1071,7 @@ struct RootView: View {
                 if let result = await ring.run(keyHex: key, source: "pull-to-refresh") {
                     refreshAfterSync(result)
                 }
-            }, onPC: { showPCAnalysis = true },
+            },
             onProfile: { showProfile = true }, onHistory: { showAllDays = true },
             onDebt: { showSleepDebt = true },
             onDay: { day, sleep in report = ReportSel(day: day, sleep: sleep) },

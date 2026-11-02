@@ -33,10 +33,6 @@
 	<array>
 		<string>org.hatemaljandali.openhealth.ring-refresh</string>
 	</array>
-	<key>NSAppTransportSecurity</key>
-	<dict><key>NSAllowsLocalNetworking</key><true/></dict>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Connect to your own PC to analyze ring data when you choose.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Open Oura connects to your Oura ring over Bluetooth to read your health data on-device.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>

@@ -492,3 +492,16 @@ new data; it uses the existing sync status indicator. Connection duration and
 disconnect-request time are logged; these do not prove radio disconnect completion.
 This scheduling/gesture applies only to the iPhone BLE client. Desktop sync keeps
 its existing behavior; no shared measurement calculations changed.
+
+### On-device analysis and baseline review (0.1.8)
+The shared summary now fills uncovered sleep windows using the existing signal
+estimator, preserving model and ring staging. This brings the model-free iPhone
+path up to the supported desktop signal analysis. Estimates retain their source
+and are not proprietary ML output. Existing daily Sleep/Activity reports and
+Insights update locally after sync; PC entry points and upload code are excluded
+from iPhone targets. Old PC report files are left untouched and not imported.
+The personal-baseline statistical model is shared by iOS and web: at least 14
+prior readings within 28 days, robust median/MAD with documented scale floors;
+recent observations only, no diagnosis, disease probability, clinical threshold,
+or push warning. It runs as part of the local summary, without a network request.
+There is no generative language model in this release.

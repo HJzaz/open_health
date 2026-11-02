@@ -30,6 +30,44 @@ fn average(values: &[f64]) -> Option<f64> {
     (!values.is_empty()).then(|| values.iter().map(|v| v / values.len() as f64).sum::<f64>())
 }
 
+fn median(mut values: Vec<f64>) -> f64 {
+    values.sort_by(f64::total_cmp);
+    let middle = values.len()/2;
+    if values.len()%2 == 0 { (values[middle-1]+values[middle])/2.0 } else { values[middle] }
+}
+
+// Small personal-baseline model. These are engineering thresholds for unusual
+// observations, not clinically validated disease thresholds or probabilities.
+fn baseline_model(days: &BTreeMap<i64, &Value>, today: i64) -> Value {
+    let mut observations = Vec::new();
+    let mut largest_baseline = 0;
+    if let Some((&day, night)) = days.iter().next_back().filter(|(day,_)| today - **day <= 1) {
+        for (field,title,unit,floor) in [("rhr","Nightly minimum heart rate","bpm",2.0),
+            ("hrv_ms","Nightly HRV","ms",5.0),("skin_temp","Skin temperature","°C",0.1)] {
+            let Some(value) = reading(night,field) else { continue };
+            let prior: Vec<f64> = days.range((day-28)..day).filter_map(|(_,n)| reading(n,field)).collect();
+            largest_baseline = largest_baseline.max(prior.len());
+            if prior.len() < 14 { continue; }
+            let center = median(prior.clone());
+            let deviation = median(prior.iter().map(|v| (v-center).abs()).collect());
+            let scale = (1.4826*deviation).max(floor);
+            let score = (value-center)/scale;
+            if score.abs() >= 3.5 {
+                observations.push(json!({"id":field,"title":title,"unit":unit,"date":label(day),
+                    "value":value,"baseline":center,"baseline_nights":prior.len(),
+                    "message":format!("{title} was {value:.1} {unit}, {} your usual median of {center:.1} {unit} across {} earlier nights. Review the recording and note recent changes in your routine. This observation does not identify a cause.",if score>0.0 {"above"} else {"below"},prior.len())}));
+            }
+        }
+    }
+    json!({"baseline_nights":largest_baseline,"observations":observations,
+        "message":if days.iter().next_back().map(|(&d,_)| today-d>1).unwrap_or(true) {
+            "No recent overnight readings to assess. Sync your ring; older history is not a current health assessment.".to_string()
+        } else if largest_baseline < 14 { format!("Learning your baseline: {largest_baseline}/14 earlier nights available. Each measurement needs 14 readings in the preceding 28 days.") }
+        else if observations.is_empty() { "No unusual changes flagged among the eligible recent readings. Missing measurements are not assessed; this is not an all-clear about your health.".into() }
+        else { "Changes from your own baseline are worth reviewing; ring readings cannot determine whether you have a health condition.".into() },
+        "method":"Local statistical baseline model, not a generative AI or medical risk model. Uses the previous 28 calendar days, at least 14 prior readings per measurement, median and median absolute deviation (MAD). Flags magnitude ≥3.5 robust deviations; minimum scales: 2 bpm, 5 ms, 0.1 °C. These thresholds are not clinically validated. No disease predictions or background alerts."})
+}
+
 pub fn build(nights: &[Value], today: &str) -> Value {
     let Some(today_day) = date_day(today) else { return Value::Null };
     let mut days: BTreeMap<i64, &Value> = BTreeMap::new();
@@ -71,7 +109,8 @@ pub fn build(nights: &[Value], today: &str) -> Value {
             "comparable":comparable,"delta":if comparable { a.zip(b).map(|(a,b)|a-b) } else { None },
             "points":current.iter().map(|(d,v)|json!({"date":label(*d),"value":v})).collect::<Vec<_>>()})
     }).collect();
-    json!({"as_of":today,"latest_night":latest.map(|(&d,_)|label(d)),"daily":daily,
+    let local_model = baseline_model(&days, today_day);
+    json!({"local_model":local_model,"as_of":today,"latest_night":latest.map(|(&d,_)|label(d)),"daily":daily,
         "message":if days.is_empty() {"Wear your ring overnight, then sync to start your insights."}
                   else if daily.is_empty() {"No recent overnight readings. Sync your ring to refresh these insights."}
                   else {"Comparisons describe your own recorded data; they do not explain a cause or provide a diagnosis."},
@@ -111,6 +150,26 @@ mod tests {
     #[test] fn stale_records_do_not_become_today_insights() {
         let x=build(&[night("2026-10-20",8.0,30.0)],"2026-10-31");
         assert!(x["daily"].as_array().unwrap().is_empty());assert_eq!(x["latest_night"],"2026-10-20");
+    }
+    #[test] fn model_requires_history_and_excludes_current_night_from_baseline() {
+        let mut nights: Vec<Value> = (1..=14).map(|d| night(&format!("2026-10-{d:02}"),8.0,30.0)).collect();
+        let current=night("2026-10-15",8.0,70.0);
+        let early=build(&[current.clone()],"2026-10-15");
+        assert_eq!(early["local_model"]["baseline_nights"],0);
+        assert!(early["local_model"]["observations"].as_array().unwrap().is_empty());
+        nights.push(current);
+        let result=build(&nights,"2026-10-15");
+        let flags=result["local_model"]["observations"].as_array().unwrap();
+        assert_eq!(flags.len(),1);assert_eq!(flags[0]["baseline"],30.0);
+        assert_eq!(flags[0]["baseline_nights"],14);
+        assert!(build(&nights,"2026-10-20")["local_model"]["observations"].as_array().unwrap().is_empty());
+    }
+    #[test] fn model_does_not_treat_missing_values_or_duplicate_nights_as_history() {
+        let repeated=vec![night("2026-10-14",8.0,30.0);20];
+        let mut rows=repeated;rows.push(night("2026-10-15",8.0,70.0));
+        let result=build(&rows,"2026-10-15");
+        assert_eq!(result["local_model"]["baseline_nights"],1);
+        assert!(result["local_model"]["observations"].as_array().unwrap().is_empty());
     }
     #[test] fn zero_and_missing_values_are_not_averaged() {
         let x=build(&[night("2026-10-31",8.0,0.0)],"2026-10-31");

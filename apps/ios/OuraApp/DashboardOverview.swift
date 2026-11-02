@@ -7,7 +7,6 @@ struct DashboardOverview: View {
     let analyzing: Bool
     let onSync: () -> Void
     let onRefresh: () async -> Void
-    let onPC: () -> Void
     let onProfile: () -> Void
     let onHistory: () -> Void
     let onDebt: () -> Void
@@ -43,7 +42,6 @@ struct DashboardOverview: View {
                 if let radar = s.symptomRadar, radar.available {
                     IllnessCard(illness: radar).obsCard()
                 }
-                pcCard
                 if s.cardio?.vascular_age != nil || s.fitness?.vo2max != nil {
                     cardiovascular
                 }
@@ -82,7 +80,6 @@ struct DashboardOverview: View {
                     Text("Open Health").font(.headline).lineLimit(1).minimumScaleFactor(0.6)
                 }.foregroundStyle(Obs.ink)
                 Spacer(minLength: 8)
-                DashboardIconButton(icon: "desktopcomputer", label: "PC analysis", action: onPC)
                 DashboardIconButton(icon: "person.crop.circle", label: "Your profile", action: onProfile)
                 DashboardIconButton(icon: "arrow.triangle.2.circlepath", label: "Sync your ring", action: onSync)
             }
@@ -132,24 +129,6 @@ struct DashboardOverview: View {
                                series: Array(s.nights.compactMap(\.spo2_mean).prefix(14).reversed())) { onVital(.oxygen) }
             }
         }
-    }
-
-    private var pcCard: some View {
-        Button(action: onPC) {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "desktopcomputer")
-                    .font(.title2).foregroundStyle(Obs.good)
-                    .frame(width: 48, height: 48).background(Obs.good.opacity(0.12), in: RoundedRectangle(cornerRadius: 15))
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("A deeper look").font(.headline).foregroundStyle(Obs.ink)
-                    Text("Send a snapshot to your PC for a private analysis report.")
-                        .font(.subheadline).foregroundStyle(Obs.ink2).fixedSize(horizontal: false, vertical: true)
-                    Label("Set up or connect", systemImage: "arrow.up.right")
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(Obs.good)
-                }
-                Spacer(minLength: 0)
-            }.obsCard()
-        }.buttonStyle(.plain)
     }
 
     private var cardiovascular: some View {
