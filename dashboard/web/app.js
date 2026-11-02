@@ -2182,6 +2182,12 @@ async function toggleLive() {
 }
 
 // Descriptive insights are calculated once in the shared Rust summary.
+function overnightStressHtml(s) {
+  if (!s) return "";
+  const color = ({higher:"var(--warn)",lower:"var(--good)",usual:"var(--text)",mixed:"var(--muted)"})[s.level] || "var(--muted)";
+  const reading = (title, r) => r ? `<p><strong>${esc(title)}</strong><br>${esc(r.value.toFixed(1))} ${esc(r.unit)} · baseline ${esc(r.baseline.toFixed(1))} ${esc(r.unit)}</p>` : "";
+  return `<article class="personal-observation"><strong>Overnight stress estimate</strong><h3 style="color:${color}">${esc(s.label)}</h3><small>HR / HRV pattern · not a live stress reading${s.date ? `<br>Night ending ${esc(s.date)}` : ""}</small>${s.status === "learning" ? `<p><progress max="14" value="${Math.max(0,Math.min(14,Number(s.baseline_nights)||0))}" aria-label="Baseline learning progress"></progress></p>` : ""}<p>${esc(s.message)}</p>${reading("Nightly minimum heart rate",s.rhr)}${reading("Nightly HRV",s.hrv)}${s.status === "ready" ? `<small>Compared with ${esc(s.baseline_nights)} earlier nights</small>` : ""}<details><summary>About this estimate</summary><p>${esc(s.method)}</p></details></article>`;
+}
 function renderPersonalInsights(d) {
   const host = $("personal-insights"), panel = $("personal-insights-panel");
   if (!host || !panel) return;
@@ -2194,7 +2200,7 @@ function renderPersonalInsights(d) {
   const baseline = model ? `<article class="personal-observation"><strong>Personal baseline review</strong><p>${esc(model.message)}</p>${(model.observations || []).map(x => `<p><strong>${esc(x.title)}</strong>: ${esc(x.message)}</p><small>Night ending ${esc(x.date)} · ${esc(x.baseline_nights)} baseline nights</small>`).join("")}<p>Wellness observations, not medical warnings. If you feel unwell or changes persist, speak with a healthcare professional; do not rely on this screen to decide whether you need care.</p><details><summary>How the model works</summary><p>${esc(model.method)}</p></details></article>` : "";
   const w = p.weekly || {};
   const rows = (w.metrics || []).map(m => `<tr><th scope="row">${esc(m.title)}</th><td>${format(m.current,m.unit)}<small>${esc(m.current_nights)}/7 nights</small></td><td>${format(m.previous,m.unit)}<small>${esc(m.previous_nights)}/7 nights</small></td><td>${m.comparable && typeof m.delta === "number" ? `${m.delta>=0?"+":""}${format(m.delta,m.unit)}` : "More nights needed"}</td></tr>`).join("");
-  host.innerHTML = `<p>${esc(p.message)}</p><small>As of ${esc(p.as_of)}</small>${baseline}<div class="personal-daily">${daily}</div><details><summary>Weekly trends</summary><p>${esc(w.current_start)} – ${esc(w.current_end)} compared with ${esc(w.previous_start)} – ${esc(w.previous_end)}</p><div class="personal-table"><table><thead><tr><th>Measurement</th><th>Last 7 days</th><th>Previous 7</th><th>Change</th></tr></thead><tbody>${rows}</tbody></table></div></details><p class="personal-method">${esc(p.method)}</p>`;
+  host.innerHTML = `<p>${esc(p.message)}</p><small>As of ${esc(p.as_of)}</small>${overnightStressHtml(p.overnight_stress)}${baseline}<div class="personal-daily">${daily}</div><details><summary>Weekly trends</summary><p>${esc(w.current_start)} – ${esc(w.current_end)} compared with ${esc(w.previous_start)} – ${esc(w.previous_end)}</p><div class="personal-table"><table><thead><tr><th>Measurement</th><th>Last 7 days</th><th>Previous 7</th><th>Change</th></tr></thead><tbody>${rows}</tbody></table></div></details><p class="personal-method">${esc(p.method)}</p>`;
 }
 
 // ── load ────────────────────────────────────────────────────

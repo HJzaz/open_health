@@ -68,6 +68,61 @@ fn baseline_model(days: &BTreeMap<i64, &Value>, today: i64) -> Value {
         "method":"Local statistical baseline model, not a generative AI or medical risk model. Uses the previous 28 calendar days, at least 14 prior readings per measurement, median and median absolute deviation (MAD). Flags magnitude ≥3.5 robust deviations; minimum scales: 2 bpm, 5 ms, 0.1 °C. These thresholds are not clinically validated. No disease predictions or background alerts."})
 }
 
+// Descriptive overnight HR/HRV pattern, not Oura's proprietary daytime stress
+// algorithm. Pair baseline readings from the same nights and never score gaps.
+fn overnight_stress(days: &BTreeMap<i64, &Value>, today: i64) -> Value {
+    let mut result = json!({
+        "status":"unavailable", "level":null, "label":"No overnight data",
+        "date":null, "baseline_nights":0, "rhr":null, "hrv":null,
+        "message":"Wear your ring overnight, then sync to start this estimate.",
+        "method":"Experimental overnight physiological strain estimate, not a measurement of mental stress or a live daytime stress score. Compares nightly minimum heart rate and average HRV with paired readings from at least 14 earlier main nights in the previous 28 calendar days. Each baseline uses its median and 1.4826 × MAD, with minimum scales of 2 bpm and 5 ms. Higher strain requires HR ≥1.5 scales above baseline AND HRV ≥1.5 scales below; lower strain requires the reverse. Both within 1.5 scales is the usual range; other patterns are mixed. These engineering thresholds are not clinically validated. Fitness, sleep, illness, medicines and recording quality can affect readings; this estimate cannot identify a cause or rule out a health problem. Calculated from saved data without extra ring sampling."
+    });
+    let Some((&day, night)) = days.iter().next_back() else { return result };
+    result["date"] = json!(label(day));
+    if today-day > 1 {
+        result["status"] = json!("stale");
+        result["label"] = json!("Sync a recent night");
+        result["message"] = json!("The latest overnight record is older than yesterday. Sync new data; no current level is assigned.");
+        return result;
+    }
+    let pairs: Vec<(f64,f64)> = days.range((day-28)..day)
+        .filter_map(|(_,n)| reading(n,"rhr").zip(reading(n,"hrv_ms"))).collect();
+    result["baseline_nights"] = json!(pairs.len());
+    let Some((hr,hrv)) = reading(night,"rhr").zip(reading(night,"hrv_ms")) else {
+        result["label"] = json!("Missing readings");
+        result["message"] = json!("This night needs both heart rate and HRV. Missing values are not treated as low stress.");
+        return result;
+    };
+    if pairs.len() < 14 {
+        result["status"] = json!("learning");
+        result["label"] = json!("Learning your baseline");
+        result["message"] = json!(format!("{}/14 earlier nights with both heart rate and HRV in the preceding 28 days. Keep wearing your ring overnight and sync; no stress level is assigned yet.",pairs.len()));
+        return result;
+    }
+    let hr_base = median(pairs.iter().map(|p|p.0).collect());
+    let hrv_base = median(pairs.iter().map(|p|p.1).collect());
+    let hr_scale = (1.4826*median(pairs.iter().map(|p|(p.0-hr_base).abs()).collect())).max(2.0);
+    let hrv_scale = (1.4826*median(pairs.iter().map(|p|(p.1-hrv_base).abs()).collect())).max(5.0);
+    let hr_shift = (hr-hr_base)/hr_scale;
+    let hrv_shift = (hrv-hrv_base)/hrv_scale;
+    let (level,title,message) = if hr_shift >= 1.5 && hrv_shift <= -1.5 {
+        ("higher","Higher strain pattern","Heart rate was higher and HRV lower than your own baseline. Consider a gentler day and time to unwind, and note how you feel. These readings do not explain the cause.")
+    } else if hr_shift <= -1.5 && hrv_shift >= 1.5 {
+        ("lower","Lower strain pattern","Heart rate was lower and HRV higher than your own baseline. This pattern is not a health all-clear and may not match how you feel.")
+    } else if hr_shift.abs() < 1.5 && hrv_shift.abs() < 1.5 {
+        ("usual","Within your usual range","Heart rate and HRV were close to your own baseline. This does not mean you have no stress or health concerns.")
+    } else {
+        ("mixed","Mixed signals","Heart rate and HRV do not show a consistent higher or lower strain pattern. Review the readings and how you feel rather than treating this as a stress level.")
+    };
+    result["status"] = json!("ready");
+    result["level"] = json!(level);
+    result["label"] = json!(title);
+    result["message"] = json!(message);
+    result["rhr"] = json!({"value":hr,"baseline":hr_base,"unit":"bpm"});
+    result["hrv"] = json!({"value":hrv,"baseline":hrv_base,"unit":"ms"});
+    result
+}
+
 pub fn build(nights: &[Value], today: &str) -> Value {
     let Some(today_day) = date_day(today) else { return Value::Null };
     let mut days: BTreeMap<i64, &Value> = BTreeMap::new();
@@ -110,7 +165,7 @@ pub fn build(nights: &[Value], today: &str) -> Value {
             "points":current.iter().map(|(d,v)|json!({"date":label(*d),"value":v})).collect::<Vec<_>>()})
     }).collect();
     let local_model = baseline_model(&days, today_day);
-    json!({"local_model":local_model,"as_of":today,"latest_night":latest.map(|(&d,_)|label(d)),"daily":daily,
+    json!({"overnight_stress":overnight_stress(&days,today_day),"local_model":local_model,"as_of":today,"latest_night":latest.map(|(&d,_)|label(d)),"daily":daily,
         "message":if days.is_empty() {"Wear your ring overnight, then sync to start your insights."}
                   else if daily.is_empty() {"No recent overnight readings. Sync your ring to refresh these insights."}
                   else {"Comparisons describe your own recorded data; they do not explain a cause or provide a diagnosis."},
@@ -175,5 +230,49 @@ mod tests {
         let x=build(&[night("2026-10-31",8.0,0.0)],"2026-10-31");
         assert!(x["weekly"]["metrics"][0]["current"].is_null());
         assert_eq!(x["weekly"]["metrics"][0]["current_nights"],0);
+    }
+    fn stress_history() -> Vec<Value> {
+        (1..=14).map(|d| night(&format!("2026-10-{d:02}"),8.0,40.0)).collect()
+    }
+    #[test] fn stress_requires_paired_prior_history_and_does_not_score_missing_data() {
+        let mut rows=stress_history();
+        assert_eq!(build(&rows,"2026-10-14")["overnight_stress"]["status"],"learning");
+        rows.push(night("2026-10-15",8.0,0.0));
+        let missing=build(&rows,"2026-10-15");
+        assert_eq!(missing["overnight_stress"]["status"],"unavailable");
+        assert!(missing["overnight_stress"]["level"].is_null());
+        rows[14]=night("2026-10-15",8.0,40.0);
+        rows[0]["rhr"]=Value::Null;
+        let unpaired=build(&rows,"2026-10-15");
+        assert_eq!(unpaired["overnight_stress"]["baseline_nights"],13);
+        assert_eq!(unpaired["overnight_stress"]["status"],"learning");
+        assert!(unpaired["overnight_stress"]["level"].is_null());
+    }
+    #[test] fn stress_patterns_require_agreement_and_preserve_baseline() {
+        for (hr,hrv,level) in [(63.0,32.5,"higher"),(57.0,47.5,"lower"),
+            (60.0,40.0,"usual"),(65.0,40.0,"mixed"),(65.0,55.0,"mixed")] {
+            let mut rows=stress_history();
+            let mut current=night("2026-10-15",8.0,hrv);current["rhr"]=json!(hr);
+            rows.push(current);
+            let x=build(&rows,"2026-10-15");let s=&x["overnight_stress"];
+            assert_eq!(s["level"],level);assert_eq!(s["status"],"ready");
+            assert_eq!(s["baseline_nights"],14);
+            assert_eq!(s["rhr"]["baseline"],60.0);assert_eq!(s["hrv"]["baseline"],40.0);
+        }
+    }
+    #[test] fn stress_does_not_reuse_stale_levels_or_count_duplicates_old_or_future_nights() {
+        let mut rows=stress_history();
+        rows.extend(vec![night("2026-10-14",4.0,40.0);10]);
+        rows.push(night("2026-09-16",8.0,40.0)); // 29 days before current
+        rows.push(night("2026-10-16",8.0,5.0)); // future
+        rows.push(night("2026-10-15",8.0,40.0));
+        let x=build(&rows,"2026-10-15");
+        assert_eq!(x["overnight_stress"]["baseline_nights"],14);
+        assert_eq!(x["overnight_stress"]["date"],"2026-10-15");
+        let stale=build(&rows,"2026-10-20");
+        assert_eq!(stale["overnight_stress"]["status"],"stale");
+        assert!(stale["overnight_stress"]["level"].is_null());
+        assert!(stale["overnight_stress"]["rhr"].is_null());
+        assert!(build(&[],"2026-10-15")["overnight_stress"]["level"].is_null());
     }
 }

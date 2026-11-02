@@ -505,3 +505,20 @@ prior readings within 28 days, robust median/MAD with documented scale floors;
 recent observations only, no diagnosis, disease probability, clinical threshold,
 or push warning. It runs as part of the local summary, without a network request.
 There is no generative language model in this release.
+
+### Overnight stress estimate (0.1.9)
+`personal_insights.overnight_stress` is a shared, experimental overnight HR/HRV
+pattern indicator, rendered on iPhone Home/Insights and the web Insights panel.
+It is not Oura's proprietary daytime stress algorithm, live stress monitoring,
+mental stress detection or a medically validated stress score. It assigns no
+level without a main night ending today/yesterday, both positive finite HR/HRV
+readings, and 14 earlier paired nights in the preceding 28 calendar days.
+The current night never trains its own baseline; duplicate dates count once.
+Each baseline uses median and 1.4826 × MAD, floored at 2 bpm / 5 ms. A higher
+strain pattern requires HR at least 1.5 scales above baseline and HRV at least
+1.5 scales below. Lower strain requires the reverse; both within 1.5 scales is
+usual; discordant/one-sided changes are explicitly mixed, not low stress.
+These are transparent engineering thresholds, not clinical cutoffs. Learning,
+missing and stale states withhold a level, and show why. Both clients show the
+night date, baseline counts, underlying values and method. No extra BLE samples,
+ring wakeups, uploads, background alerts or proprietary model weights are added.

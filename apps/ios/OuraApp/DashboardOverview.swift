@@ -30,6 +30,9 @@ struct DashboardOverview: View {
                 header
                 DailyOverviewHero(s: s, ring: ring, onSync: onSync)
                 PersonalInsightsCard(insights: s.personalInsights) { showInsights = true }
+                if let stress = s.personalInsights?.overnight_stress {
+                    OvernightStressCard(stress: stress)
+                }
                 vitals
                 if let day = s.days.first {
                     sectionTitle("Sleep & movement", detail: "Your latest day")

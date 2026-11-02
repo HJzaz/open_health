@@ -2956,7 +2956,7 @@ pub fn build_summary(
             has("real_step_event_feature_1") || has("real_step_event_feature_2"),
             "enable real_steps"
         ),
-        insight("Stress / resilience", false, "needs cloud scores"),
+        insight("Daytime stress / resilience", false, "proprietary daytime scores not included; see overnight stress estimate"),
     ]);
     let mut battery: Option<(i64, i64, Option<f64>)> = None;
     let mut battery_best_unix: Option<f64> = None;

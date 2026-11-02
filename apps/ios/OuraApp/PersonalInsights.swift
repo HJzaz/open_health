@@ -1,6 +1,23 @@
 import SwiftUI
 
 struct PersonalInsights: Codable {
+    struct OvernightStress: Codable {
+        struct Measurement: Codable {
+            let value: Double
+            let baseline: Double
+            let unit: String
+        }
+        let status: String
+        let level: String?
+        let label: String
+        let date: String?
+        let baseline_nights: Int
+        let message: String
+        let method: String
+        let rhr: Measurement?
+        let hrv: Measurement?
+    }
+    let overnight_stress: OvernightStress?
     struct BaselineModel: Codable {
         struct Observation: Codable, Identifiable {
             let id: String
@@ -96,6 +113,9 @@ struct PersonalInsightsView: View {
                         Text("Weekly trends").tag(1)
                     }.pickerStyle(.segmented)
                     if let insights {
+                        if let stress = insights.overnight_stress {
+                            OvernightStressCard(stress: stress)
+                        }
                         if let model = insights.local_model {
                             VStack(alignment: .leading, spacing: 12) {
                                 Label("Personal baseline review", systemImage: "waveform.path.ecg").font(.headline)
@@ -142,6 +162,55 @@ struct PersonalInsightsView: View {
                 .navigationTitle("Insights")
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }.tint(Obs.good)
+    }
+}
+
+/// A descriptive overnight pattern. No extra BLE reads or live stress claims.
+struct OvernightStressCard: View {
+    let stress: PersonalInsights.OvernightStress
+    private var tint: Color {
+        switch stress.level {
+        case "higher": return Obs.coral
+        case "lower": return Obs.good
+        case "usual": return Obs.blue
+        default: return Obs.lavender
+        }
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Overnight stress estimate", systemImage: "waveform.path.ecg")
+                .font(.headline).foregroundStyle(Obs.ink)
+            Text(stress.label).font(.title2.bold()).foregroundStyle(tint)
+            Text("HR / HRV pattern · not a live stress reading")
+                .font(.caption).foregroundStyle(Obs.muted)
+            if let date = stress.date {
+                Text("Night ending \(date)").font(.caption).foregroundStyle(Obs.muted)
+            }
+            if stress.status == "learning" {
+                ProgressView(value: Double(min(stress.baseline_nights, 14)), total: 14)
+                    .tint(tint).accessibilityLabel("Baseline learning progress")
+                    .accessibilityValue("\(stress.baseline_nights) of 14 prior nights")
+            }
+            Text(stress.message).font(.subheadline).foregroundStyle(Obs.ink2)
+            if let hr = stress.rhr, let hrv = stress.hrv {
+                VStack(alignment: .leading, spacing: 8) {
+                    measurement("Nightly minimum heart rate", hr)
+                    measurement("Nightly HRV", hrv)
+                }
+                Text("Compared with \(stress.baseline_nights) earlier nights")
+                    .font(.caption).foregroundStyle(Obs.muted)
+            }
+            DisclosureGroup("About this estimate") {
+                Text(stress.method).font(.footnote).foregroundStyle(Obs.ink2).padding(.top, 6)
+            }.font(.subheadline).tint(Obs.good).foregroundStyle(Obs.ink)
+        }.frame(maxWidth: .infinity, alignment: .leading).obsCard()
+    }
+    private func measurement(_ title: String, _ reading: PersonalInsights.OvernightStress.Measurement) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.caption).foregroundStyle(Obs.muted)
+            Text(String(format: "%.1f %@ · baseline %.1f %@", reading.value, reading.unit, reading.baseline, reading.unit))
+                .font(.subheadline.weight(.medium)).foregroundStyle(Obs.ink)
+        }
     }
 }
 
