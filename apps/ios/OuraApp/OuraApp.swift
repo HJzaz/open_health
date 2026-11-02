@@ -1072,11 +1072,17 @@ struct RootView: View {
                 dlog("pull-refresh", "requested cancelled=\(Task.isCancelled) busy=\(ring.busy) syncAvailable=\(WorkCoordinator.shared.syncAvailable)")
                 guard !ring.busy, WorkCoordinator.shared.syncAvailable else { dlog("pull-refresh", "skipped: busy or lifecycle unavailable"); return }
                 guard let key = Keychain.loadKey() else { dlog("pull-refresh", "skipped: pairing key missing"); showSync = true; return }
-                if let result = await ring.run(keyHex: key, source: "pull-to-refresh") {
-                    refreshAfterSync(result)
-                } else {
-                    dlog("pull-refresh", "ended without report cancelled=\(Task.isCancelled) status=\(ring.status)")
+                // SwiftUI may cancel its refresh task when publishing `busy`
+                // rebuilds this view. The ring operation owns its lifetime;
+                // lifecycle pause and the sync watchdog still stop it.
+                let sync = Task { @MainActor in
+                    if let result = await ring.run(keyHex: key, source: "pull-to-refresh") {
+                        refreshAfterSync(result)
+                    } else {
+                        dlog("pull-refresh", "ended without report cancelled=\(Task.isCancelled) status=\(ring.status)")
+                    }
                 }
+                await sync.value
             },
             onProfile: { showProfile = true }, onHistory: { showAllDays = true },
             onDebt: { showSleepDebt = true },

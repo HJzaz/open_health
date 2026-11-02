@@ -206,11 +206,16 @@ final class BLETransport: NSObject, RingTransport, CBCentralManagerDelegate, CBP
         guard !closed else { return }
         closed = true
         central.stopScan()
+        // finishConnect(failure) clears/cancels its peripheral even when the
+        // connect already completed. Transfer ownership before calling it, so
+        // normal teardown requests one disconnect and can observe its callback.
+        let closingPeripheral = peripheral
+        peripheral = nil; writeChar = nil
         finishWrite(.failure(BLEError.disconnected))
         finishConnect(.failure(BLEError.disconnected))
         notifyContinuation?.finish()
         historyBuffer.removeAll()
-        if let p = peripheral {
+        if let p = closingPeripheral {
             pendingDisconnect = p
             disconnectRequestedAt = ProcessInfo.processInfo.systemUptime
             dlog("ble-close", "disconnect requested state=\(p.state.rawValue)")

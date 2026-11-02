@@ -34,10 +34,19 @@ enum AutoSyncPolicy {
 enum BackgroundRingSync {
     static let identifier = "org.hatemaljandali.openhealth.ring-refresh"
 
+    private static func logInstalledConfiguration() {
+        let bundle = Bundle.main
+        let modes = bundle.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String] ?? []
+        let permitted = bundle.object(forInfoDictionaryKey: "BGTaskSchedulerPermittedIdentifiers") as? [String] ?? []
+        dlog("schedule-config", "bundle=\(bundle.bundleIdentifier ?? "missing") task=\(identifier) modes=\(modes.joined(separator: ",")) permitted=\(permitted.joined(separator: ",")) taskPermitted=\(permitted.contains(identifier)) fetchMode=\(modes.contains("fetch")) refreshStatus=\(UIApplication.shared.backgroundRefreshStatus.rawValue)")
+    }
+
     static func register() {
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { task in
+        logInstalledConfiguration()
+        let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { task in
             Task { @MainActor in await execute(task) }
         }
+        dlog("schedule", "background task registration accepted=\(registered)")
     }
 
     static func schedule() {
@@ -59,8 +68,9 @@ enum BackgroundRingSync {
         do {
             try BGTaskScheduler.shared.submit(request)
         } catch {
-            // Background refresh can be disabled by the user or system. Manual and
-            // foreground sync continue; never claim a request is guaranteed to run.
+            // Inspect the installed (possibly re-signed) plist rather than
+            // assuming the source configuration reached the phone unchanged.
+            logInstalledConfiguration()
             dlog("schedule", "background refresh unavailable domain=\((error as NSError).domain) code=\((error as NSError).code) description=\(error.localizedDescription)")
         }
     }

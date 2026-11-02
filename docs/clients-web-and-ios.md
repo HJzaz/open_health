@@ -563,3 +563,19 @@ preserved partial staging and complete estimated coverage are distinguished.
 Native technical logs also include these record summaries. They do not establish
 clinical staging accuracy or a cause of signal loss. Phone-specific radio and
 scheduler diagnostics intentionally have no web BLE counterpart.
+
+### Refresh lifetime and installed scheduling diagnostics (0.1.12)
+Native Home pull-to-refresh awaits an independent MainActor task, so SwiftUI
+refresh-view cancellation does not cancel the ring operation when `busy` changes.
+The existing lifecycle pause, concurrency gate, manual timeout and retry limits
+still apply. Completion publishes the refreshed summary from that same task.
+Normal BLE close transfers the peripheral before resolving any outstanding
+connect continuation, preventing that helper from clearing it before disconnect
+observation is armed. A disconnect request is still distinct from its callback.
+Background task registration and scheduling failures log the installed bundle
+ID, requested/permitted task identifiers, background modes and refresh status.
+This diagnoses re-signed package configuration without assuming a user setting
+caused error 3, and does not promise iOS will schedule background execution.
+These native lifecycle fixes have no web counterpart; measurement modes, sync
+throttles and shared health calculations are unchanged. Device verification of
+refresh, disconnect callbacks and a single-version battery baseline is required.
