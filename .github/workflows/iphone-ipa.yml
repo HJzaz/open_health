@@ -1,0 +1,89 @@
+name: Build iPhone IPA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: iphone-ipa-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/iphone-sideload
+      - name: Record app source commit
+        run: git rev-parse HEAD
+      - name: Install build tools
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          command -v rustup >/dev/null
+          rustup default stable
+          python3 -m venv "$RUNNER_TEMP/ipa-tools"
+          "$RUNNER_TEMP/ipa-tools/bin/pip" install PyYAML==6.0.2
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: iphone-ipa-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: iphone-ipa-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-
+      - name: Test shared Rust core
+        run: cargo test --locked -p oura-core -p oura-summary
+      - name: Build Rust iOS framework
+        run: bash apps/ios/build-xcframework.sh
+      - name: Generate personal sideload project
+        run: |
+          "$RUNNER_TEMP/ipa-tools/bin/python" apps/ios/prepare-sideload.py
+          cd apps/ios/OuraApp
+          xcodegen generate --spec project-sideload.yml
+      - name: Build unsigned iPhone application
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project apps/ios/OuraApp/OuraApp.xcodeproj \
+            -scheme OuraApp -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/iphone-build" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            2>&1 | tee "$RUNNER_TEMP/iphone-build.log"
+      - name: Package and verify IPA
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          ditto "$RUNNER_TEMP/iphone-build/Build/Products/Release-iphoneos/OuraApp.app" "$RUNNER_TEMP/ipa/Payload/OuraApp.app"
+          test -f "$RUNNER_TEMP/ipa/Payload/OuraApp.app/OuraApp"
+          plutil -lint "$RUNNER_TEMP/ipa/Payload/OuraApp.app/Info.plist"
+          test "$(plutil -extract CFBundleIdentifier raw "$RUNNER_TEMP/ipa/Payload/OuraApp.app/Info.plist")" = "org.hatemaljandali.openhealth"
+          cd "$RUNNER_TEMP/ipa"
+          ditto -c -k --keepParent Payload OpenHealth-unsigned.ipa
+          unzip -t OpenHealth-unsigned.ipa
+          shasum -a 256 OpenHealth-unsigned.ipa > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenHealth-iPhone-unsigned
+          path: |
+            ${{ runner.temp }}/ipa/OpenHealth-unsigned.ipa
+            ${{ runner.temp }}/ipa/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: iphone-build-log
+          path: ${{ runner.temp }}/iphone-build.log
+          if-no-files-found: ignore
+      - name: Describe result
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## iPhone package ready
+          Download **OpenHealth-iPhone-unsigned** from this run's Artifacts, unzip it on Windows, and sign/install the IPA using your sideloading tool.
+          This is an **unsigned physical-device build**, not a simulator app or TestFlight release.
+          Requires iOS 17+. Apple Health export and the absent advanced ML models are disabled in this build.
+          Bluetooth connection and Ring 4 firmware compatibility still need testing on the actual ring.
+          See apps/ios/WINDOWS_INSTALL.md. Do not reset the ring just to install the app.
+          EOF
