@@ -292,6 +292,7 @@ struct UndatedNight: Codable {
     var reason: String?; var recoverable: Bool?
 }
 struct Summary: Codable {
+    var data_quality: DataQuality? = nil
     var personalInsights: PersonalInsights? = nil
     var analysis_digest: String? = nil
     var analysis_version: Int? = nil
@@ -316,6 +317,7 @@ struct Summary: Codable {
     // `workouts`/`modelErrors` are filled on-device (not in the FFI JSON), so keep them
     // out of decoding.
     enum CodingKeys: String, CodingKey {
+        case data_quality
         case personalInsights = "personal_insights"
         case analysis_digest, analysis_version
         case digest, device, nights, clock, vitals, activity_profile, activity_daily, profile, cardio, fitness, error
@@ -329,6 +331,7 @@ struct Summary: Codable {
     /// Summary that carries the message instead of a generic "decode failed".
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        data_quality = try? c.decodeIfPresent(DataQuality.self, forKey: .data_quality)
         personalInsights = try? c.decodeIfPresent(PersonalInsights.self, forKey: .personalInsights)
         analysis_digest = try? c.decodeIfPresent(String.self, forKey: .analysis_digest)
         analysis_version = try? c.decodeIfPresent(Int.self, forKey: .analysis_version)

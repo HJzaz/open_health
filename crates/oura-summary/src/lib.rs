@@ -13,6 +13,7 @@
 //! `docs/clients-web-and-ios.md`.
 
 pub mod personal_insights;
+pub mod data_quality;
 pub mod hourly_hr;
 pub mod research_export;
 pub mod ring_time;
@@ -2961,6 +2962,7 @@ pub fn build_summary(
     let mut battery: Option<(i64, i64, Option<f64>)> = None;
     let mut battery_best_unix: Option<f64> = None;
     let mut battery_readings: Vec<(f64, i64)> = Vec::new();
+    let mut diagnostic_battery_readings: Vec<(f64, i64)> = Vec::new();
     for (ds, tag, jstr, cu) in &events {
         if name_of(*tag) == "debug_data" && jstr.contains("battery_pct") {
             if let Ok(v) = serde_json::from_str::<Value>(jstr) {
@@ -2975,6 +2977,9 @@ pub fn build_summary(
                     if let Some(u) = b_unix {
                         if (0..=100).contains(&p) {
                             battery_readings.push((u, p));
+                            if clock.resolve(*ds, *cu).source.is_dated() {
+                                diagnostic_battery_readings.push((u,p));
+                            }
                         }
                     }
                 }
@@ -3101,7 +3106,9 @@ pub fn build_summary(
     clock_diag["warnings"] = json!(clock_warnings);
 
     let personal_insights = personal_insights::build(&nights_json, &ymd_label(now, tz));
+    let data_quality = data_quality::build(&events, &clock, &nights_json, &diagnostic_battery_readings, now, tz);
     Ok(json!({
+        "data_quality": data_quality,
         "personal_insights": personal_insights,
         "generated_at": now,
         "tz": tz,

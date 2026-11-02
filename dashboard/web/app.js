@@ -1575,6 +1575,14 @@ function batteryRecordedLabel(dev) {
   return rec;
 }
 
+function dataQualityHtml(q) {
+  if (!q) return "";
+  const b=q.battery, c=q.coverage;
+  const fmt=(n)=>typeof n === "number" && Number.isFinite(n) ? n.toFixed(1) : "—";
+  const battery=b.points_per_day != null ? `${fmt(b.points_per_day)} percentage points / day · net drop ${fmt(b.net_drop_points)} over ${fmt(b.span_hours)} hours` : "Collecting baseline";
+  const when=typeof b.end_at === "number" ? `<small>Latest included battery reading: ${esc(new Date(b.end_at*1000).toLocaleString())}</small>` : "";
+  return `<details class="personal-observation"><summary>Data &amp; battery</summary><h3>Observed battery change</h3><p>${esc(battery)}</p><p>${esc(b.message)}</p><small>${esc(b.samples)} readings in the current segment</small>${when}<details><summary>How this is calculated</summary><p>${esc(b.method)}</p></details><h3>Saved signal coverage</h3><p>Last 7 calendar days, through this snapshot. ${esc(c.recorded_nights)} sleep records · ${esc(c.complete_staging_nights)} fully staged records.</p><p>Fully staged means the estimator covered the recorded window; it does not establish sleep-stage accuracy.</p>${c.signals.map(s=>`<p><strong>${esc(s.title)}</strong>: ${esc(s.bins)} bins with data · ${esc(s.outside_sleep_bins)} outside recorded sleep</p>`).join("")}<p>${esc(c.message)}</p><details><summary>Daytime stress feasibility</summary><p>${esc(c.candidate_overlap_bins)} outside-sleep bins contain HR, HRV and movement samples.</p><p>${esc(c.next_step)}</p><p>${esc(q.untrusted_clock_packets)} relevant packets across saved history excluded because their clocks are not anchored reliably.</p></details><p>${esc(q.scope)}</p><a download="OpenHealth-diagnostics.json" href="data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(q,null,2))}">Download diagnostic summary</a><p>Includes counts, timestamps and battery observations. No raw ring records, pairing keys or profile.</p></details>`;
+}
 function renderDevice(d) {
   const box = $("device");
   const dev = d.device || {};
@@ -1596,6 +1604,7 @@ function renderDevice(d) {
   box.append(stats);
   const battery = batteryChart(dev.battery_history || []);
   if (battery) box.append(battery);
+  if (d.data_quality) box.append(el("div", "", dataQualityHtml(d.data_quality)));
 
   // left = data streams (what the ring is recording)
   const left = el("div");

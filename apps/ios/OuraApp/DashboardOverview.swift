@@ -14,6 +14,7 @@ struct DashboardOverview: View {
     let onVital: (VitalKind) -> Void
     @State private var showInsights = false
     @State private var showBackups = false
+    @State private var showQuality = false
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var greeting: String {
@@ -64,6 +65,21 @@ struct DashboardOverview: View {
                         .font(.headline).foregroundStyle(Obs.ink).frame(maxWidth: .infinity, alignment: .leading).obsCard()
                 }.buttonStyle(.plain)
                 RingOverviewPanel(s: s, onSync: onSync)
+                if let quality = s.data_quality {
+                    Button { showQuality = true } label: {
+                        VStack(alignment: .leading, spacing: 9) {
+                            HStack {
+                                Label("Data & battery", systemImage: "chart.bar.doc.horizontal")
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.caption)
+                            }.font(.headline).foregroundStyle(Obs.ink)
+                            Text("\(quality.coverage.recorded_nights) sleep records in the last 7 calendar days")
+                                .font(.subheadline).foregroundStyle(Obs.ink2)
+                            Text(quality.battery.status == "ready" ? "Battery baseline available · view signal coverage" : "Collecting battery baseline · view signal coverage")
+                                .font(.caption).foregroundStyle(Obs.muted)
+                        }.frame(maxWidth: .infinity, alignment: .leading).obsCard()
+                    }.buttonStyle(.plain)
+                }
             }
             .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 32)
             .frame(maxWidth: 720)
@@ -73,6 +89,7 @@ struct DashboardOverview: View {
         .background(Obs.paper)
         .sheet(isPresented: $showInsights) { PersonalInsightsView(insights: s.personalInsights) }
         .sheet(isPresented: $showBackups) { BackupCenterView(ring: ring, onManage: onSync) }
+        .sheet(isPresented: $showQuality) { if let quality = s.data_quality { DataQualityView(quality: quality) } }
     }
 
     private var header: some View {

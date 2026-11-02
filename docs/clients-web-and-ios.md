@@ -522,3 +522,23 @@ These are transparent engineering thresholds, not clinical cutoffs. Learning,
 missing and stale states withhold a level, and show why. Both clients show the
 night date, baseline counts, underlying values and method. No extra BLE samples,
 ring wakeups, uploads, background alerts or proprietary model weights are added.
+
+### Data quality and battery baseline (0.1.10)
+`data_quality` is calculated from already-loaded events, without BLE polling.
+iPhone Home opens Data & battery; web device diagnostics renders the same report.
+An explicit share/download exports aggregate counts, timestamps and battery
+observations only, excluding raw ring events, profile and pairing secrets.
+The current local calendar day plus six earlier days are divided into 15-minute
+bins. Counts describe bins containing accepted HR, reported positive HRV, or MET
+samples, not recording duration. Only anchored/projected clocks are admitted.
+Outside known sleep windows is not proof of waking wear; overlapping bins are
+only candidates for further study, not simultaneous clean physiological signals.
+Raw IBI and generic temperature channels are not promoted to validated signals.
+The report also counts recorded sleep windows and complete staging; neither is
+a clinical validation. Battery net change uses at least 3 unambiguous readings
+spanning 24 hours within the last 72, ending no more than 24 hours ago. A rise or
+gap over 12 hours resets the segment. Conflicting same-second readings are dropped.
+Rate is percentage points/day, not remaining-life prediction or causal attribution.
+Phase one stops here: recovery scoring, daytime stress and workout recording
+remain later roadmap items. Physical-ring battery comparisons and a user-shared
+diagnostic report are still needed before concluding daytime feasibility.

@@ -14,8 +14,8 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.1.9"
-    CURRENT_PROJECT_VERSION: "49"
+    MARKETING_VERSION: "0.1.10"
+    CURRENT_PROJECT_VERSION: "50"
     PRODUCT_BUNDLE_IDENTIFIER: md.thomas.openoura
     TARGETED_DEVICE_FAMILY: "1"   # iPhone only (no iPad multitasking orientation reqs)
     CODE_SIGN_STYLE: Automatic
@@ -50,6 +50,7 @@ targets:
       - path: ResearchExport.swift
       - path: HeartRate.swift
       - path: PersonalInsights.swift
+      - path: DataQuality.swift
       - path: LocalBackups.swift
       - path: DashboardOverview.swift
       - path: Theme.swift
