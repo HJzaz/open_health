@@ -183,6 +183,26 @@ client re-derives packet timing at all — tracked as a follow-up.
 
 ## Known gaps (iOS-only, not yet on the web)
 
+- **Two-hour ring auto-sync (iOS)**: foreground due checks and best-effort
+  BGAppRefresh requests. Only an OS-granted sync lease bypasses the foreground
+  BLE guard; model analysis still requires the foreground. Expiration pauses the
+  incremental drain. The web does not schedule phone Bluetooth work. Background
+  execution and protected-data access are not guaranteed by iOS.
+
+
+- **PC analysis connection (iOS)** uploads an explicit database snapshot and saved
+  profile to the private Windows gateway, then displays a separately timestamped
+  report. The gateway invokes `oura analyze`, which reuses the web dashboard's
+  `PythonRunner` and shared `build_summary`; calculations are not duplicated.
+  The web already runs this pipeline locally, so it needs no upload UI. Private
+  model weights are still absent; signal fallback stages are estimates.
+
+
+- **Personal sideload build**: the optional GitHub IPA workflow uses a model-free
+  iPhone project without the HealthKit entitlement. Its build-specific Info.plist
+  disables Apple Health export; regular CI/TestFlight and web behavior are unchanged.
+
+
 Now on both: the model-free Symptom Radar (`symptoms`, used when the Python runner
 has no `illness`) and the ring-clock warnings (`clock.warnings`). Still iOS-only:
 
@@ -427,3 +447,61 @@ The web BLE actions (sync, live HR, feature mode) share one operation gate. Live
 HR drains stderr concurrently, retains only a bounded tail, and kills/reaps a
 stalled or disconnected child before releasing the gate. Hardware/firmware live
 HR support still depends on the pinned BLE implementation.
+
+### Open Health visual refresh (0.1.4)
+
+Both clients share the navy/mint palette, layered surfaces, softer card corners and
+system headings. The iPhone home additionally uses a first-night overview, an actual
+battery gauge, four accessible vital cards, a prominent PC report entry and collapsed
+device diagnostics. This mobile composition is intentionally iOS-only; calculations,
+measurement availability and the desktop dashboard's existing report layout stay the
+same. Missing measurements remain empty, and the VO2 estimate is labelled as dependent
+on the saved profile. The simulator-only `-visualPreview` launch flag shows empty data
+for layout review without manufacturing personal readings or initiating ring sync.
+
+
+### Personal insights and on-device snapshots (0.1.5)
+
+`personal_insights::build` supplies one JSON contract to both clients. Daily text
+compares a recent main night with at least three earlier recorded nights in the
+preceding seven calendar days. Weekly averages compare today plus the preceding
+six days with the seven days before that; a displayed change requires three
+measurements per window. Missing, undated and future days are omitted, not zeroed.
+One longest period of at least three hours in bed is used per wake date. Time in
+bed is labelled as such, not as measured time asleep. These are descriptive
+comparisons, without diagnostic conclusions or claims about causes.
+
+The iPhone Backups & data screen adds protected, consistent SQLite snapshots after
+foreground sync, at most once per 24 hours, retaining the latest three. Export to
+Files is an explicit user action; snapshots inside the app cannot protect against
+app deletion or phone loss. Raw records are included; profiles and Keychain secrets
+are not. Restore continues through the existing ring-manager file restore workflow.
+This automatic snapshot UI is iPhone-only; desktop data remains managed as local
+files. No health data is uploaded automatically by these features.
+
+Local PC transport (0.1.6): iOS optionally accepts RFC1918 IPv4 HTTP on port 8765 with explicit trusted Wi-Fi opt-in; Tailscale HTTPS remains the default. Local HTTP is unencrypted. Redirects remain blocked and the connection code is still required. This connection setup applies only to the iOS upload client, not the locally hosted web dashboard.
+
+### Battery-conscious iPhone sync (0.1.7)
+Automatic attempts share a persisted two-hour cooldown (including interruptions) and
+a 12-attempt rolling-day cap. Each automatic run makes one attempt; manual runs
+make at most two, with 90-second automatic and ten-minute manual run limits.
+Sleep processing requests are limited to once in six hours and, for automatic
+runs, local hours 06:00–17:59. Incremental downloads still run independently.
+Pull-to-refresh on the native home scroll view awaits manual sync and reloads
+new data; it uses the existing sync status indicator. Connection duration and
+disconnect-request time are logged; these do not prove radio disconnect completion.
+This scheduling/gesture applies only to the iPhone BLE client. Desktop sync keeps
+its existing behavior; no shared measurement calculations changed.
+
+### On-device analysis and baseline review (0.1.8)
+The shared summary now fills uncovered sleep windows using the existing signal
+estimator, preserving model and ring staging. This brings the model-free iPhone
+path up to the supported desktop signal analysis. Estimates retain their source
+and are not proprietary ML output. Existing daily Sleep/Activity reports and
+Insights update locally after sync; PC entry points and upload code are excluded
+from iPhone targets. Old PC report files are left untouched and not imported.
+The personal-baseline statistical model is shared by iOS and web: at least 14
+prior readings within 28 days, robust median/MAD with documented scale floors;
+recent observations only, no diagnosis, disease probability, clinical threshold,
+or push warning. It runs as part of the local summary, without a network request.
+There is no generative language model in this release.

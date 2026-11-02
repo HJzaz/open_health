@@ -50,7 +50,7 @@ enum SummaryCache {
 }
 
 enum Core {
-    /// Fast, model-free summary (vitals, activity ridges, device) straight from the
+    /// Local summary (signal sleep estimates, vitals, activity and baseline review) from the
     /// shared-core JSON — safe to compute on a background queue and show immediately.
     static func base() -> Summary {
         let path = DB.readPath()   // synced DB if present, else the bundled seed

@@ -1013,3 +1013,41 @@ body.page-open { overflow: hidden; }
 .research fieldset { border: 1px solid var(--line); border-radius: var(--radius-sm); display: grid; gap: 4px; padding: 8px 10px; margin: 4px 0; }
 .research legend { color: var(--muted); padding: 0 4px; }
 .research .muted { color: var(--muted); margin: 0; }
+
+/* Open Health 0.1.4 — matching navy / mint surfaces and softer cards. */
+:root {
+  --bg: #f3f6fb; --surface: #fff; --surface-2: #e9f1fa;
+  --text: #17243a; --muted: #61738c; --faint: #70819a;
+  --accent: #16826d; --accent-soft: #e4f5ee;
+  --line: #dce4ef; --radius: 24px; --radius-sm: 14px;
+  --serif: var(--sans); --spark: #16826d;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #090f1c; --surface: #141e30; --surface-2: #1b2940;
+    --text: #f3f6fc; --muted: #a5b5cd; --faint: #93a5c0;
+    --accent: #69dbbd; --accent-soft: #203e3c; --line: #26334a;
+    --deep: #a99cf6; --light: #98b7f4; --rem: #69dbbd; --wake: #f0bd79;
+    --spark: #69dbbd;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #090f1c; --surface: #141e30; --surface-2: #1b2940;
+  --text: #f3f6fc; --muted: #a5b5cd; --faint: #93a5c0;
+  --accent: #69dbbd; --accent-soft: #203e3c; --line: #26334a;
+  --deep: #a99cf6; --light: #98b7f4; --rem: #69dbbd; --wake: #f0bd79;
+  --spark: #69dbbd;
+}
+button, input, select { font-family: var(--sans); }
+
+/* Descriptive daily/weekly report: missing nights are labelled, never zero-filled. */
+.personal-daily { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 14px; margin: 18px 0; }
+.personal-observation { background: var(--surface-2); padding: 18px; border-radius: 18px; }
+.personal-observation p { margin: 10px 0; }
+#personal-insights small, .personal-method { color: var(--muted); }
+#personal-insights summary { padding: 12px 0; cursor: pointer; font-weight: 600; }
+.personal-table { overflow-x: auto; }
+.personal-table table { width: 100%; border-collapse: collapse; min-width: 540px; }
+.personal-table th, .personal-table td { padding: 14px 10px; text-align: left; border-bottom: 1px solid var(--line); }
+.personal-table td small { display: block; margin-top: 6px; }
+.personal-method { margin-top: 18px; font-size: 13px; }

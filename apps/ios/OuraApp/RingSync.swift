@@ -321,7 +321,7 @@ final class RingSync: ObservableObject {
 
     /// A launch/foreground refresh is useful, but reconnecting twice while someone
     /// briefly switches apps is not. Manual sync remains available at any time.
-    static let automaticSyncCooldown: TimeInterval = 3 * 60
+    static let automaticSyncCooldown: TimeInterval = AutoSyncPolicy.interval
     private static let lastSuccessfulSyncKey = "ring.last-successful-sync-at"
     // Set the moment a drain reports real progress, cleared only on a completed
     // sync — so it survives an app kill mid-drain and distinguishes "interrupted
@@ -334,7 +334,7 @@ final class RingSync: ObservableObject {
     private var lastProgressBytes: UInt64?
     private var lastProgressAt: Date?
     private var smoothedBytesPerSecond: Double?
-    private var lastAutomaticAttemptAt: Date?
+    private static let lastSleepRequestKey = "ring.sleep-processing.last-request"
     private var markedIncompleteThisRun = false
     private var paused = false
     private var runID = ""
@@ -364,6 +364,8 @@ final class RingSync: ObservableObject {
             lifecycleObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in
                     guard let self, self.busy else { return }
+                    if name == UIApplication.didEnterBackgroundNotification,
+                       WorkCoordinator.shared.backgroundSyncAllowed { return }
                     WorkCoordinator.shared.beginCleanup()
                     self.pause()
                 }
@@ -377,28 +379,37 @@ final class RingSync: ObservableObject {
         lastSuccessfulSyncAt.map { Date().timeIntervalSince($0) < Self.automaticSyncCooldown } ?? false
     }
 
-    /// Opportunistic refresh used at launch and when returning to the app. It never
-    /// prompts for a key. Normally a timid single attempt behind a cooldown — but
-    /// when the last sync was interrupted mid-drain, the checkpointed cursor means
-    /// data is sitting half-transferred on the ring, so resume eagerly with the
-    /// retry loop instead of silently giving up.
-    func syncAutomaticallyIfNeeded(now: Date = Date()) async -> SyncReport? {
-        guard WorkCoordinator.shared.available, !busy, let key = Keychain.loadKey() else { return nil }
+    /// Persist the attempt budget across foreground/background instances and launches.
+    /// Interrupted drains keep their cursor, but do not bypass the battery cooldown.
+    func syncAutomaticallyIfNeeded(now: Date = Date(), background: Bool = false) async -> SyncReport? {
+        guard AutoSyncPolicy.enabled, WorkCoordinator.shared.syncAvailable, !busy, let key = Keychain.loadKey() else { return nil }
+        // A background task uses its own RingSync instance; adopt its saved result
+        // so returning to the foreground does not start another two-hour sync early.
+        let persisted = UserDefaults.standard.double(forKey: Self.lastSuccessfulSyncKey)
+        if persisted > (lastSuccessfulSyncAt?.timeIntervalSince1970 ?? 0) {
+            lastSuccessfulSyncAt = Date(timeIntervalSince1970: persisted)
+        }
+        let defaults = UserDefaults.standard
+        func savedDate(_ key: String) -> Date? {
+            let value = defaults.double(forKey: key)
+            return value > 0 ? Date(timeIntervalSince1970: value) : nil
+        }
+        guard AutoSyncPolicy.mayAttempt(lastSuccess: lastSuccessfulSyncAt,
+            lastAttempt: savedDate(AutoSyncPolicy.lastAttemptKey),
+            windowStart: savedDate(AutoSyncPolicy.windowKey),
+            count: defaults.integer(forKey: AutoSyncPolicy.countKey), now: now) else { return nil }
+        if savedDate(AutoSyncPolicy.windowKey).map({ now.timeIntervalSince($0) >= 86400 }) ?? true {
+            defaults.set(now.timeIntervalSince1970, forKey: AutoSyncPolicy.windowKey)
+            defaults.set(0, forKey: AutoSyncPolicy.countKey)
+        }
+        defaults.set(now.timeIntervalSince1970, forKey: AutoSyncPolicy.lastAttemptKey)
+        defaults.set(defaults.integer(forKey: AutoSyncPolicy.countKey) + 1, forKey: AutoSyncPolicy.countKey)
+        dlog("battery", "automatic attempt budget=\(defaults.integer(forKey: AutoSyncPolicy.countKey))/12; two-hour cooldown applies even on failure")
         let resuming = hasIncompleteSync
-        if !resuming,
-           let successful = lastSuccessfulSyncAt,
-           now.timeIntervalSince(successful) < Self.automaticSyncCooldown {
-            return nil
-        }
-        // A failed scan should not immediately restart because scenePhase bounced.
-        if !paused, let attempted = lastAutomaticAttemptAt, now.timeIntervalSince(attempted) < 60 {
-            return nil
-        }
-        lastAutomaticAttemptAt = now
         if resuming { status = "Resuming sync…" }
         return await run(keyHex: key,
-                         maxAttempts: resuming ? 3 : 1,
-                         source: resuming ? "resume" : "automatic")
+                         maxAttempts: 1,
+                         source: background ? "background" : "automatic")
     }
 
     func resetLocalDatabase() async -> Bool {
@@ -619,7 +630,7 @@ final class RingSync: ObservableObject {
     }
 
     @discardableResult
-    func run(keyHex: String, maxAttempts: Int = 6, source: String = "manual") async -> SyncReport? {
+    func run(keyHex: String, maxAttempts: Int = 2, source: String = "manual") async -> SyncReport? {
         guard !busy else { return nil }
         connectionIssue = nil
         lastReport = nil   // clear any prior success so a failed retry isn't read as one
@@ -634,18 +645,26 @@ final class RingSync: ObservableObject {
             status = "key must be 32 hex characters"
             return nil
         }
-        guard WorkCoordinator.shared.available else { status = "Sync paused. Open the app to resume."; return nil }
+        guard WorkCoordinator.shared.syncAvailable else { status = "Sync paused. Open the app to resume."; return nil }
         busy = true
         paused = false
         WorkCoordinator.shared.invalidateAnalysis()
         await WorkGate.shared.acquire()
         defer { Task { await WorkGate.shared.release() }; WorkCoordinator.shared.endCleanup() }
-        guard !paused, WorkCoordinator.shared.available else { busy = false; return nil }
+        guard !paused, WorkCoordinator.shared.syncAvailable else { busy = false; return nil }
         markedIncompleteThisRun = false
         // A multi-hour first sync must not die because the screen locked; SyncView
         // refreshes this when the app becomes active again.
         IdleTimerLock.acquire("ring-sync")
+        let runStartedAt = Date()
+        let watchdog = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: source == "manual" || source == "pull-to-refresh" ? 600_000_000_000 : 90_000_000_000) } catch { return }
+            self?.pause()
+            self?.status = "Sync time limit reached. Try a manual sync when the ring is nearby."
+        }
         defer {
+            watchdog.cancel()
+            dlog("battery", "run ended source=\(source) duration=\(Int(Date().timeIntervalSince(runStartedAt)))s; disconnect requested at=\(Date().timeIntervalSince1970)")
             busy = false
             IdleTimerLock.release("ring-sync")
             pump?.cancel()
@@ -664,9 +683,9 @@ final class RingSync: ObservableObject {
         var connectedDuringRun = source == "resume"
         var excludedPeripherals = Set<UUID>()
         var attempt = 1
-        var totalBudget = max(1, maxAttempts)
+        let totalBudget = max(1, maxAttempts)
         while attempt <= totalBudget {
-            if paused || Task.isCancelled || !WorkCoordinator.shared.available { status = "Sync paused. Return to the app to resume."; return nil }
+            if paused || Task.isCancelled || !WorkCoordinator.shared.syncAvailable { status = "Sync paused. Return to the app to resume."; return nil }
             attemptID = UUID().uuidString
             dlog("sync", "attempt=\(attempt) id=\(attemptID) run=\(runID)")
             if attempt > 1 {
@@ -676,7 +695,7 @@ final class RingSync: ObservableObject {
                     status = "Connection lost. Retrying (\(attempt) of \(totalBudget))…"
                 }
                 do { try await Task.sleep(nanoseconds: delayNs) } catch { return nil }
-                guard !paused, WorkCoordinator.shared.available else { return nil }
+                guard !paused, WorkCoordinator.shared.syncAvailable else { return nil }
             }
 
             if excludedPeripherals.isEmpty {
@@ -687,7 +706,8 @@ final class RingSync: ObservableObject {
             // BLETransport's notification stream is per-connection.
             let t = BLETransport(nameContains: "Oura",
                                  preferredPeripheralID: preferredPeripheralID,
-                                 excludedPeripheralIDs: excludedPeripherals)
+                                 excludedPeripheralIDs: excludedPeripherals,
+                                 backgroundScan: source == "background")
             transport = t
             do {
                 try await t.connect()
@@ -738,6 +758,9 @@ final class RingSync: ObservableObject {
                 let expectedAttempt = attemptID
                 let progress = SyncProgressBridge { [weak self] stage, bytesLeft, events in
                     guard self?.attemptID == expectedAttempt, self?.busy == true, self?.paused == false else { return }
+                    if stage == "sleep-request" {
+                        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastSleepRequestKey)
+                    }
                     if stage == "setup" {
                         Keychain.saveKey(key)
                     }
@@ -746,11 +769,24 @@ final class RingSync: ObservableObject {
                     }
                     self?.showProgress(stage: stage, bytesLeft: bytesLeft, events: events)
                 }
-                let report = try await s.sync(dbPath: DB.url.path, keyHex: key, progress: progress)
+                let lastSleep = UserDefaults.standard.double(forKey: Self.lastSleepRequestKey)
+                let requestSleep = AutoSyncPolicy.shouldRequestSleep(
+                    lastRequest: lastSleep > 0 ? Date(timeIntervalSince1970: lastSleep) : nil,
+                    now: Date(), hour: Calendar.current.component(.hour, from: Date()),
+                    manual: source == "manual" || source == "pull-to-refresh")
+                dlog("battery", "sleep processing requested=\(requestSleep)")
+                let report = try await s.syncWithOptions(dbPath: DB.url.path, keyHex: key,
+                    requestSleepAnalysis: requestSleep, progress: progress)
                 Keychain.saveKey(key)
                 rememberSerial(report.serial)
                 rememberPeripheral(t.connectedPeripheralID)
 
+                // Release the radio link before local snapshot or UI work.
+                pump?.cancel()
+                pump = nil
+                t.disconnect()
+                transport = nil
+                session = nil
                 lastReport = report
                 let completedAt = Date()
                 lastSuccessfulSyncAt = completedAt
@@ -759,6 +795,7 @@ final class RingSync: ObservableObject {
                 clearIncompleteSync()
                 dlog("sync", "OK run=\(runID) inserted=\(report.inserted) events=\(report.eventsSynced) cursor=\(report.nextCursor)")
                 status = "Sync complete."
+                if WorkCoordinator.shared.available { _ = await LocalBackups.shared.capture() }
                 return report
             } catch {
                 // the Rust layer packs the diagnostic detail (auth state, missing
@@ -780,7 +817,7 @@ final class RingSync: ObservableObject {
                         if badID == preferredPeripheralID {
                             UserDefaults.standard.removeObject(forKey: Self.preferredPeripheralKey)
                         }
-                        totalBudget = max(totalBudget, attempt + 1)
+                        // Keep the fixed attempt budget even when another nearby ring answers.
                         dlog("sync", "ring id=\(badID.uuidString.suffix(12)) rejected auth key; excluding and scanning for another nearby ring")
                         status = "Another Oura ring answered first; scanning for your paired ring…"
                         attempt += 1

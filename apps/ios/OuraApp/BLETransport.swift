@@ -70,6 +70,7 @@ final class BLETransport: NSObject, RingTransport, CBCentralManagerDelegate, CBP
         return _connectedPeripheralID
     }
     private var writeChar: CBCharacteristic?
+    private let backgroundScan: Bool
     private let nameContains: String
     private let preferredPeripheralID: UUID?
     private let excludedPeripheralIDs: Set<UUID>
@@ -112,7 +113,9 @@ final class BLETransport: NSObject, RingTransport, CBCentralManagerDelegate, CBP
 
     init(nameContains: String = "Oura",
          preferredPeripheralID: UUID? = nil,
-         excludedPeripheralIDs: Set<UUID> = []) {
+         excludedPeripheralIDs: Set<UUID> = [],
+         backgroundScan: Bool = false) {
+        self.backgroundScan = backgroundScan
         self.nameContains = nameContains
         self.preferredPeripheralID = preferredPeripheralID
         self.excludedPeripheralIDs = excludedPeripheralIDs
@@ -186,8 +189,8 @@ final class BLETransport: NSObject, RingTransport, CBCentralManagerDelegate, CBP
         // scan response, which a worn ring in low-power mode answers lazily. Without
         // duplicates iOS may coalesce the ring into a single early, name-less report.
         central.scanForPeripherals(
-            withServices: nil,
-            options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
+            withServices: backgroundScan ? [RingUUID.service] : nil,
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: !backgroundScan])
     }
 
     /// Finish the inbound frame stream so a Rust drain blocked on `recv` returns at once

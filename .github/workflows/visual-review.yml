@@ -1,0 +1,60 @@
+name: Review iPhone visuals
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/iphone-sideload]
+    paths:
+      - '.github/workflows/visual-review.yml'
+      - 'apps/ios/OuraApp/DashboardOverview.swift'
+      - 'apps/ios/OuraApp/Theme.swift'
+      - 'apps/ios/OuraApp/OuraApp.swift'
+permissions:
+  contents: read
+jobs:
+  screenshots:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: iphone-ipa-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: iphone-ipa-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-
+      - name: Build simulator app
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          bash apps/ios/build-xcframework.sh
+          cd apps/ios/OuraApp
+          xcodegen generate --spec project-ci.yml
+          xcodebuild build -project OuraApp.xcodeproj -scheme OuraApp -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/visual-build" CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES PRODUCT_BUNDLE_IDENTIFIER=org.hatemaljandali.openhealth
+      - name: Render native screens
+        run: |
+          set -euo pipefail
+          SIM=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; ds=[v for k,vs in json.load(sys.stdin)["devices"].items() if "iOS" in k for v in vs if "iPhone" in v["name"]]; print(next((v["udid"] for v in ds if v["name"]=="iPhone 16"),ds[0]["udid"]))')
+          xcrun simctl boot "$SIM" || true
+          xcrun simctl bootstatus "$SIM" -b
+          xcrun simctl status_bar "$SIM" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100
+          xcrun simctl install "$SIM" "$RUNNER_TEMP/visual-build/Build/Products/Debug-iphonesimulator/OuraApp.app"
+          mkdir -p visuals
+          for STYLE in dark light; do
+            xcrun simctl ui "$SIM" appearance "$STYLE"
+            xcrun simctl ui "$SIM" content_size large
+            xcrun simctl launch --terminate-running-process "$SIM" org.hatemaljandali.openhealth -visualPreview
+            sleep 3
+            xcrun simctl io "$SIM" screenshot "visuals/home-$STYLE.png"
+          done
+          xcrun simctl ui "$SIM" appearance dark
+          xcrun simctl ui "$SIM" content_size accessibility-extra-extra-extra-large
+          xcrun simctl launch --terminate-running-process "$SIM" org.hatemaljandali.openhealth -visualPreview
+          sleep 3
+          xcrun simctl io "$SIM" screenshot visuals/home-large-text.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenHealth-visual-review
+          path: visuals/*.png
+          if-no-files-found: error
+          retention-days: 14

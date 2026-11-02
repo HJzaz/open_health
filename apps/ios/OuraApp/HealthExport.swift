@@ -12,6 +12,11 @@ final class HealthExport: ObservableObject {
     private static let enabledKey = "health.export.enabled"
     private static let fingerprintKey = "health.export.fp"
     private static let syncPrefix = "openoura."
+    private static var exportAvailable: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "OpenOuraHealthExportDisabled") as? Bool != true
+    }
+    private static let unavailableMessage = "Apple Health export is unavailable in this personal build."
+
 
     /// RMSSD and SDNN are different measurements. SDKs before iOS 27 do not
     /// declare RMSSD, so resolve the public constant only on supporting systems.
@@ -34,7 +39,7 @@ final class HealthExport: ObservableObject {
     private var pushing = false
 
     private init() {
-        enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
+        enabled = Self.exportAvailable && UserDefaults.standard.bool(forKey: Self.enabledKey)
     }
 
     static var shareTypes: Set<HKSampleType> {
@@ -69,6 +74,11 @@ final class HealthExport: ObservableObject {
     }
 
     func setEnabled(_ on: Bool, summary: Summary?) {
+        guard Self.exportAvailable else {
+            enabled = false
+            status = Self.unavailableMessage
+            return
+        }
         enabled = on
         guard on else {
             status = "Export paused. Samples already in Health are left in place."
@@ -91,7 +101,7 @@ final class HealthExport: ObservableObject {
     }
 
     func push(_ summary: Summary, force: Bool = false) {
-        guard enabled, summary.error == nil else { return }
+        guard Self.exportAvailable, enabled, summary.error == nil else { return }
         guard HKHealthStore.isHealthDataAvailable() else { return }
         let fp = Self.fingerprint(summary)
         if !force, fp == UserDefaults.standard.string(forKey: Self.fingerprintKey) { return }
@@ -104,6 +114,10 @@ final class HealthExport: ObservableObject {
     }
 
     func removeExportedSamples() {
+        guard Self.exportAvailable else {
+            status = Self.unavailableMessage
+            return
+        }
         queue.async { [weak self] in
             guard let self else { return }
             let group = DispatchGroup()
@@ -128,6 +142,11 @@ final class HealthExport: ObservableObject {
     }
 
     private func authorize(completion: @escaping (Bool, Error?) -> Void) {
+        guard Self.exportAvailable else {
+            completion(false, NSError(domain: "open_oura", code: 3,
+                                      userInfo: [NSLocalizedDescriptionKey: Self.unavailableMessage]))
+            return
+        }
         guard HKHealthStore.isHealthDataAvailable() else {
             completion(false, NSError(domain: "open_oura", code: 1,
                                       userInfo: [NSLocalizedDescriptionKey: "Apple Health is unavailable on this device."]))

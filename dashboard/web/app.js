@@ -2181,6 +2181,22 @@ async function toggleLive() {
   $("live-label").textContent = "Start";
 }
 
+// Descriptive insights are calculated once in the shared Rust summary.
+function renderPersonalInsights(d) {
+  const host = $("personal-insights"), panel = $("personal-insights-panel");
+  if (!host || !panel) return;
+  const p = d.personal_insights;
+  panel.hidden = !p;
+  if (!p) { host.textContent = ""; return; }
+  const format = (v, unit) => typeof v === "number" && Number.isFinite(v) ? `${v.toFixed(1)} ${esc(unit)}` : "No readings";
+  const daily = (p.daily || []).map(x => `<article class="personal-observation"><strong>${esc(x.title)}</strong><p>${esc(x.message)}</p><small>Night ending ${esc(x.date)}</small></article>`).join("");
+  const model = p.local_model;
+  const baseline = model ? `<article class="personal-observation"><strong>Personal baseline review</strong><p>${esc(model.message)}</p>${(model.observations || []).map(x => `<p><strong>${esc(x.title)}</strong>: ${esc(x.message)}</p><small>Night ending ${esc(x.date)} · ${esc(x.baseline_nights)} baseline nights</small>`).join("")}<p>Wellness observations, not medical warnings. If you feel unwell or changes persist, speak with a healthcare professional; do not rely on this screen to decide whether you need care.</p><details><summary>How the model works</summary><p>${esc(model.method)}</p></details></article>` : "";
+  const w = p.weekly || {};
+  const rows = (w.metrics || []).map(m => `<tr><th scope="row">${esc(m.title)}</th><td>${format(m.current,m.unit)}<small>${esc(m.current_nights)}/7 nights</small></td><td>${format(m.previous,m.unit)}<small>${esc(m.previous_nights)}/7 nights</small></td><td>${m.comparable && typeof m.delta === "number" ? `${m.delta>=0?"+":""}${format(m.delta,m.unit)}` : "More nights needed"}</td></tr>`).join("");
+  host.innerHTML = `<p>${esc(p.message)}</p><small>As of ${esc(p.as_of)}</small>${baseline}<div class="personal-daily">${daily}</div><details><summary>Weekly trends</summary><p>${esc(w.current_start)} – ${esc(w.current_end)} compared with ${esc(w.previous_start)} – ${esc(w.previous_end)}</p><div class="personal-table"><table><thead><tr><th>Measurement</th><th>Last 7 days</th><th>Previous 7</th><th>Change</th></tr></thead><tbody>${rows}</tbody></table></div></details><p class="personal-method">${esc(p.method)}</p>`;
+}
+
 // ── load ────────────────────────────────────────────────────
 // show the error in the headline and stop every panel's loading shimmer, so the
 // page reads as "errored" rather than stuck mid-load.
@@ -2220,6 +2236,7 @@ async function load() {
   $("digest").innerHTML = (d.digest || "").replace(/([+-]?\d[\d.]*\s?(?:%|bpm|ms|m\/s))/g, '<span class="metric">$1</span>');
   renderActions(d);
   renderTiles(d);
+  renderPersonalInsights(d);
   HR_QUARTER_LOAD = null;
   renderDay(d);
   renderSleepDebt(d);

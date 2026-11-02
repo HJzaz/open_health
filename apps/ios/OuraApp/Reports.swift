@@ -1577,6 +1577,10 @@ struct SleepReport: View {
             let metrics = (n.hypnogram.flatMap { st in Sleep.metrics(Sleep.isOuraStaging(n.staging_source) ? st : Sleep.smooth(st, 5), inBedS: n.durationS) })
             let asleepH = metrics.map { $0.asleepMin / 60 }
 
+            if n.staging_source == "signals" {
+                Text("Sleep stages estimated on this iPhone from recorded signals. These estimates are not clinical sleep scoring.")
+                    .font(.footnote).foregroundStyle(Obs.ink2)
+            }
             // summary strip
             HStack(alignment: .top, spacing: 0) {
                 Readout(value: n.in_bed_h.map { String(format: "%.1f h", $0) } ?? "–", caption: "in bed")

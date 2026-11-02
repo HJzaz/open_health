@@ -1,0 +1,54 @@
+name: Build Windows analysis service
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/iphone-sideload]
+    paths:
+      - '.github/workflows/windows-analysis.yml'
+      - 'services/pc-analysis/**'
+      - 'crates/**'
+      - 'Cargo.lock'
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test private gateway
+        working-directory: services/pc-analysis
+        run: python -m unittest -v test_server
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: pc-analysis-windows-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: pc-analysis-windows-${{ hashFiles('Cargo.lock') }}-
+      - name: Build desktop analysis engine
+        run: cargo build --locked --release -p oura-cli
+      - name: Check offline analysis command
+        run: target/release/oura.exe analyze --help
+      - name: Package Windows service
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package
+          Copy-Item target/release/oura.exe package/
+          Copy-Item services/pc-analysis/server.py package/
+          Copy-Item services/pc-analysis/Start-Analysis.cmd package/
+          Set-Content package/Start-Analysis-Local.cmd '@call "%~dp0Start-Analysis.cmd" --local-wifi'
+          Copy-Item services/pc-analysis/README.md package/
+          Copy-Item LICENSE package/
+          # Optional desktop Python runners. No private model weights or user data.
+          Copy-Item -Recurse tools package/tools
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenHealth-Windows-analysis
+          path: package/
+          if-no-files-found: error
+          retention-days: 14

@@ -12,6 +12,7 @@
 //! *render* it: web `dashboard/web/app.js`, iOS `apps/ios/OuraApp/OuraApp.swift`. See
 //! `docs/clients-web-and-ios.md`.
 
+pub mod personal_insights;
 pub mod hourly_hr;
 pub mod research_export;
 pub mod ring_time;
@@ -1282,6 +1283,19 @@ pub fn stage_night_from_signals(
     smooth_stages(&refined, 5)
 }
 
+fn signal_hypnogram(start_ds: i64, end_ds: i64, captured_unix: i64,
+    hr: &[(i64,f64)], hrv: &[(i64,f64)], motion: &[(i64,f64)]) -> Value {
+    let stages = stage_night_from_signals(start_ds, end_ds, hr, hrv, motion);
+    if stages.is_empty() { return Value::Null; }
+    let n = stages.len() as f64;
+    let pct = |code: i64| (stages.iter().filter(|&&c| c == code).count() as f64 / n * 100.0).round();
+    let asleep = stages.iter().filter(|&&c| (1..=3).contains(&c)).count() as f64;
+    json!({"start_ds":start_ds,"end_ds":end_ds,"captured_unix":captured_unix,
+        "epochs":stages.len(),"in_bed_min":n*0.5,"asleep_min":asleep*0.5,
+        "efficiency_pct":(asleep/n*100.0).round(),"deep_pct":pct(1),"light_pct":pct(2),
+        "rem_pct":pct(3),"wake_pct":pct(4),"source":"signals","stages":stages})
+}
+
 /// Fallback batch stager for desktop/CLI runs when the proprietary `.pt` model is
 /// unavailable on the machine. Reads nocturnal `hrv_event` (`0x5d`) and `motion_event`
 /// (`0x47`) streams from `db` and returns the same JSON batch shape as `run_sleep_model.py`.
@@ -1321,30 +1335,7 @@ pub fn stage_nights_from_signals(db: &Path, sleep_ranges: &[[i64; 3]]) -> Option
         hr_t.sort_by_key(|&(ds, _)| ds);
         hrv_t.sort_by_key(|&(ds, _)| ds);
         motion_t.sort_by_key(|&(ds, _)| ds);
-        let stages = stage_night_from_signals(start_ds, end_ds, &hr_t, &hrv_t, &motion_t);
-        if stages.is_empty() {
-            results.push(Value::Null);
-            continue;
-        }
-        let n = stages.len() as f64;
-        let pct =
-            |code: i64| (stages.iter().filter(|&&c| c == code).count() as f64 / n * 100.0).round();
-        let asleep = stages.iter().filter(|&&c| (1..=3).contains(&c)).count() as f64;
-        results.push(json!({
-            "start_ds": start_ds,
-            "end_ds": end_ds,
-            "captured_unix": captured_unix,
-            "epochs": stages.len(),
-            "in_bed_min": n * 0.5,
-            "asleep_min": asleep * 0.5,
-            "efficiency_pct": (asleep / n * 100.0).round(),
-            "deep_pct": pct(1),
-            "light_pct": pct(2),
-            "rem_pct": pct(3),
-            "wake_pct": pct(4),
-            "source": "signals",
-            "stages": stages,
-        }));
+        results.push(signal_hypnogram(start_ds, end_ds, captured_unix, &hr_t, &hrv_t, &motion_t));
     }
     Some(Value::Array(results))
 }
@@ -2444,6 +2435,17 @@ pub fn build_summary(
         hyps.entry(start_ds).or_insert(hypnogram);
     }
 
+    // Fill only missing stages, using the epoch-aware signals already collected
+    // above. Do not re-read the database or mix same-timestamp packets from reboots.
+    for night in &nights {
+        let key = (night.start_ds, night.captured_unix);
+        if !hyps.contains_key(&key) {
+            let estimate = signal_hypnogram(night.start_ds, night.end_ds, night.captured_unix,
+                &night.hr_t, &night.hrv_t, &night.motion_t);
+            if !estimate.is_null() { hyps.insert(key, estimate); }
+        }
+    }
+
     nights.sort_by(|a, b| {
         unix_s_at(a.start_ds, a.captured_unix)
             .total_cmp(&unix_s_at(b.start_ds, b.captured_unix))
@@ -3098,7 +3100,9 @@ pub fn build_summary(
     clock_diag["undated_reasons"] = json!(undated_reasons_json);
     clock_diag["warnings"] = json!(clock_warnings);
 
+    let personal_insights = personal_insights::build(&nights_json, &ymd_label(now, tz));
     Ok(json!({
+        "personal_insights": personal_insights,
         "generated_at": now,
         "tz": tz,
         "digest": digest,
@@ -3171,6 +3175,11 @@ mod tests {
             motion_t.push((ds, mo));
         }
         let stages = stage_night_from_signals(start_ds, end_ds, &hr_t, &hrv_t, &motion_t);
+        let local = signal_hypnogram(start_ds, end_ds, 123, &hr_t, &hrv_t, &motion_t);
+        assert_eq!(local["source"], "signals");
+        assert_eq!(local["captured_unix"], 123);
+        assert_eq!(local["stages"], json!(stages));
+        assert!(signal_hypnogram(start_ds, end_ds, 123, &[], &[], &[]).is_null());
         // One cell per 30 s epoch across the whole window — the night is not blank.
         assert_eq!(stages.len(), ((end_ds - start_ds) / 300) as usize);
         // And some of it is scored as sleep rather than all wake (the reported bug left

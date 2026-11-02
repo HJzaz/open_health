@@ -41,6 +41,12 @@ final class AnalysisRun: @unchecked Sendable {
 final class WorkCoordinator {
     static let shared = WorkCoordinator()
     var available: Bool { UIApplication.shared.applicationState == .active && UIApplication.shared.isProtectedDataAvailable }
+    // Only the OS-granted ring refresh lease permits background BLE work.
+    var backgroundSyncAllowed = false
+    var syncAvailable: Bool {
+        (UIApplication.shared.applicationState == .active || backgroundSyncAllowed)
+            && UIApplication.shared.isProtectedDataAvailable
+    }
     private var analysis: AnalysisRun?
     private var observers: [NSObjectProtocol] = []
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid

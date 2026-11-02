@@ -252,6 +252,12 @@ enum Command {
     /// Serve a local web health dashboard (sleep, cardio, SpO2, activity, device)
     /// at http://127.0.0.1:PORT. Rust computes from oura.db; torch models run via
     /// the Python runners. All data stays on this machine.
+    /// Analyze an exported database offline, using desktop runners where available.
+    /// Emits the shared report JSON; never connects to a ring or requires its key.
+    Analyze {
+        #[arg(long, default_value_t = local_tz_offset_hours(), value_parser = parse_tz_offset, allow_hyphen_values = true)]
+        tz_offset: f64,
+    },
     Dashboard {
         /// Local HTTP port.
         #[arg(long, default_value_t = 8090)]
@@ -496,6 +502,12 @@ async fn main() -> Result<()> {
         Command::Subscribe { feature, mode } => cmd_subscribe(&cli, &key, feature, mode).await,
         Command::FeatureMode { feature, mode } => cmd_feature_mode(&cli, &key, feature, mode).await,
         Command::FeatureStatus => cmd_feature_status(&cli, &key).await,
+        Command::Analyze { tz_offset } => {
+            let db = pyrunner::resolve_db(&cli.db)?;
+            let summary = dashboard::build_summary(&db, *tz_offset)?;
+            println!("{}", serde_json::to_string(&summary)?);
+            Ok(())
+        }
         Command::Dashboard {
             port,
             tz_offset,
