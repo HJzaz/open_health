@@ -1046,6 +1046,9 @@ struct RootView: View {
                 if !run.isCancelled, WorkCoordinator.shared.available {
                     if full.error == nil {
                         s = full
+                        for record in full.data_quality?.coverage.sleep_records ?? [] {
+                            dlog("sleep-coverage", "end=\(record.end_at) durationMin=\(record.duration_min) source=\(record.source ?? "none") reason=\(record.reason) usableHR=\(record.usable_hr_samples) HRV=\(record.hrv_samples) movement=\(record.motion_samples)")
+                        }
                         if let device = full.device {
                             dlog("battery", "summary battery=\(device.battery_pct.map(String.init) ?? "unknown")% recorded=\(device.battery_recorded ?? "unknown") \(device.battery_recorded_hm ?? "") loadedAt=\(Date().timeIntervalSince1970)")
                         }
@@ -1066,10 +1069,13 @@ struct RootView: View {
     private func content(_ s: Summary) -> some View {
         DashboardOverview(s: s, ring: ring, analyzing: isRefreshingSummary,
             onSync: { showSync = true }, onRefresh: {
-                guard !ring.busy, WorkCoordinator.shared.syncAvailable else { return }
-                guard let key = Keychain.loadKey() else { showSync = true; return }
+                dlog("pull-refresh", "requested cancelled=\(Task.isCancelled) busy=\(ring.busy) syncAvailable=\(WorkCoordinator.shared.syncAvailable)")
+                guard !ring.busy, WorkCoordinator.shared.syncAvailable else { dlog("pull-refresh", "skipped: busy or lifecycle unavailable"); return }
+                guard let key = Keychain.loadKey() else { dlog("pull-refresh", "skipped: pairing key missing"); showSync = true; return }
                 if let result = await ring.run(keyHex: key, source: "pull-to-refresh") {
                     refreshAfterSync(result)
+                } else {
+                    dlog("pull-refresh", "ended without report cancelled=\(Task.isCancelled) status=\(ring.status)")
                 }
             },
             onProfile: { showProfile = true }, onHistory: { showAllDays = true },

@@ -2641,6 +2641,9 @@ pub fn build_summary(
             "staging_source": staging_source,
             "staging_coverage_pct": coverage_pct,
             "staging_complete": complete_staging,
+            "staging_diagnostic": data_quality::staging_diagnostic(in_bed_s/60.0,
+                nt.hr_t.iter().filter(|(_,v)| *v>30.0 && *v<140.0).count(),
+                nt.hrv_t.len(), nt.motion_t.len(), staging_source, full_stages.len(), complete_staging),
             "captured_unix": nt.captured_unix,
             // full-resolution hypnogram + aligned raw signals for the detail page's
             // stacked polysomnograph (empty arrays stay out of the way when absent).

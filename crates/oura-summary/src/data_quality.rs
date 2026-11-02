@@ -31,6 +31,24 @@ fn battery_report(readings: &[(f64,i64)], now: f64) -> Value {
         "method":"Uses the last 72 hours of saved ring readings. Any percentage increase starts a new segment, since charging or measurement variation may have occurred. Changes between readings can be missed. No extra battery polling."})
 }
 
+/// Explains estimator eligibility without pretending to diagnose signal loss.
+pub(crate) fn staging_diagnostic(duration_min:f64, usable_hr:usize, hrv:usize, motion:usize,
+    source:Option<&str>, stage_count:usize, complete:bool) -> Value {
+    let (reason,explanation)=if complete {
+        ("complete","Every cell in the recorded window has an estimated stage; this does not establish accuracy.")
+    } else if stage_count>0 {
+        ("partial_existing_staging","Existing staging contains unknown cells. It is preserved rather than overwritten with invented stages.")
+    } else if duration_min<60.0 {
+        ("short_record","The signal fallback requires a recorded window of at least 60 minutes. This may be a short rest rather than a failed night.")
+    } else if usable_hr<12 {
+        ("insufficient_hr","The signal fallback requires at least 12 usable heart-rate samples. Missing samples are not converted into sleep stages.")
+    } else {
+        ("unavailable","No staging result is available despite the basic fallback eligibility checks. Further inspection is needed.")
+    };
+    json!({"reason":reason,"explanation":explanation,"duration_min":duration_min,
+        "usable_hr_samples":usable_hr,"hrv_samples":hrv,"motion_samples":motion,"source":source})
+}
+
 fn signal_report(samples: &[(usize,f64)], nights: &[Value], now:f64, tz:f64) -> Value {
     let today=((now+tz*3600.0)/DAY).floor() as i64;
     let cut=(today-6) as f64*DAY-tz*3600.0;
@@ -50,7 +68,13 @@ fn signal_report(samples: &[(usize,f64)], nights: &[Value], now:f64, tz:f64) -> 
     let rows:Vec<Value>=[("hr","Accepted heart rate"),("hrv","Reported HRV"),("movement","Movement samples")].iter().enumerate()
         .map(|(i,(id,title))|json!({"id":id,"title":title,"bins":all[i].len(),"outside_sleep_bins":outside[i].len()})).collect();
     let recent:Vec<&Value>=nights.iter().filter(|n|n["end_unix"].as_f64().map(|e|e>=cut && e<=now).unwrap_or(false)).collect();
-    json!({"window_start":cut,"window_end":now,"latest_sample_at":latest,"signals":rows,
+    let records:Vec<Value>=recent.iter().map(|n| {
+        let mut d=n["staging_diagnostic"].clone();
+        if !d.is_object() { d=json!({"reason":"not_reported","explanation":"Reload to refresh staging diagnostics.","duration_min":0,"usable_hr_samples":0,"hrv_samples":0,"motion_samples":0,"source":null}); }
+        d["end_at"]=n["end_unix"].clone();
+        d
+    }).collect();
+    json!({"sleep_records":records,"window_start":cut,"window_end":now,"latest_sample_at":latest,"signals":rows,
         "recorded_nights":recent.len(),"complete_staging_nights":recent.iter().filter(|n|n["staging_complete"].as_bool()==Some(true)).count(),
         "candidate_overlap_bins":overlap,
         "message":"Counts show 15-minute bins containing at least one saved sample, not minutes of continuous recording. Outside recorded sleep windows does not prove wakefulness or ring wear. Overlap in a bin does not establish simultaneous or low-motion measurements. This is not a daytime stress result.",
@@ -120,6 +144,12 @@ pub(crate) fn build(events:&[(i64,u8,String,i64)], clock:&RingClock, nights:&[Va
         assert_eq!(x["candidate_overlap_bins"],1);
         assert_eq!(x["complete_staging_nights"],1);
         assert_eq!(signal_report(&[],&[],now,0.0)["signals"][0]["bins"],0);
+    }
+    #[test] fn staging_reasons_distinguish_short_rest_missing_hr_and_partial_results() {
+        assert_eq!(staging_diagnostic(30.0,0,0,0,None,0,false)["reason"],"short_record");
+        assert_eq!(staging_diagnostic(480.0,11,2,10,None,0,false)["reason"],"insufficient_hr");
+        assert_eq!(staging_diagnostic(480.0,100,50,20,Some("ring"),30,false)["reason"],"partial_existing_staging");
+        assert_eq!(staging_diagnostic(480.0,100,50,20,Some("signals"),960,true)["reason"],"complete");
     }
     #[test] fn parser_uses_anchored_packed_times_and_ignores_raw_ibi_and_invalid_hrv() {
         let now=10.0*DAY;

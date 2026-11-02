@@ -61,7 +61,7 @@ enum BackgroundRingSync {
         } catch {
             // Background refresh can be disabled by the user or system. Manual and
             // foreground sync continue; never claim a request is guaranteed to run.
-            dlog("schedule", "background refresh unavailable")
+            dlog("schedule", "background refresh unavailable domain=\((error as NSError).domain) code=\((error as NSError).code) description=\(error.localizedDescription)")
         }
     }
 

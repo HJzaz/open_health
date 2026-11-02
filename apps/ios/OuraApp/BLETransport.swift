@@ -60,6 +60,10 @@ enum BLEError: Error, CustomStringConvertible {
 final class BLETransport: NSObject, RingTransport, CBCentralManagerDelegate, CBPeripheralDelegate, @unchecked Sendable {
     private let bleQueue = DispatchQueue(label: "md.thomas.openoura.ble", qos: .userInitiated)
     private var closed = false
+    // Retained only until callback/timeout. A requested close is not confirmation.
+    private var pendingDisconnect: CBPeripheral?
+    private var disconnectRequestedAt: TimeInterval?
+    private var connectedAt: TimeInterval?
     private var writeTimeout: DispatchWorkItem?
     private var central: CBCentralManager!
     private var peripheral: CBPeripheral?
@@ -206,7 +210,21 @@ final class BLETransport: NSObject, RingTransport, CBCentralManagerDelegate, CBP
         finishConnect(.failure(BLEError.disconnected))
         notifyContinuation?.finish()
         historyBuffer.removeAll()
-        if let p = peripheral { central.cancelPeripheralConnection(p) }
+        if let p = peripheral {
+            pendingDisconnect = p
+            disconnectRequestedAt = ProcessInfo.processInfo.systemUptime
+            dlog("ble-close", "disconnect requested state=\(p.state.rawValue)")
+            central.cancelPeripheralConnection(p)
+            // Keep the delegate alive for a bounded callback window, even after the
+            // sync releases its transport. Suspension can delay observation.
+            bleQueue.asyncAfter(deadline: .now() + 5) { [self] in
+                guard pendingDisconnect === p else { return }
+                dlog("ble-close", "disconnect confirmation not observed within 5s; radio state not inferred")
+                pendingDisconnect = nil; disconnectRequestedAt = nil
+            }
+        } else {
+            dlog("ble-close", "closed without a peripheral; no disconnect confirmation expected")
+        }
         peripheral = nil; writeChar = nil
     }
 
@@ -331,6 +349,7 @@ final class BLETransport: NSObject, RingTransport, CBCentralManagerDelegate, CBP
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         guard !closed, self.peripheral === peripheral else { return }
+        connectedAt = ProcessInfo.processInfo.systemUptime
         let mtu = peripheral.maximumWriteValueLength(for: .withResponse)
         dlog("ble", "GATT connected (maxWrite=\(mtu)B); discovering the Oura service")
         lock.lock(); stage = "discovering services/characteristics"; lock.unlock()
@@ -346,6 +365,14 @@ final class BLETransport: NSObject, RingTransport, CBCentralManagerDelegate, CBP
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral,
                         error: Error?) {
+        if pendingDisconnect === peripheral {
+            let now = ProcessInfo.processInfo.systemUptime
+            let delay = disconnectRequestedAt.map { now - $0 } ?? 0
+            let connected = connectedAt.map { now - $0 }
+            dlog("ble-close", "disconnect confirmed callback delay=\(String(format: "%.3f", delay))s connectedDuration=\(connected.map { String(format: "%.3f", $0) } ?? "unknown")s error=\(error.map { String(describing: $0) } ?? "clean")")
+            pendingDisconnect = nil; disconnectRequestedAt = nil
+            return
+        }
         guard !closed, self.peripheral === peripheral else { return }
         dlog("ble", "peripheral disconnected: \(error.map { String(describing: $0) } ?? "clean")")
         notifyContinuation?.finish()

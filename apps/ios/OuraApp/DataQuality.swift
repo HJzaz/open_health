@@ -14,6 +14,17 @@ struct DataQuality: Codable {
         let method: String
     }
     struct Coverage: Codable {
+        struct SleepRecord: Codable {
+            let end_at: Double
+            let duration_min: Double
+            let source: String?
+            let reason: String
+            let explanation: String
+            let usable_hr_samples: Int
+            let hrv_samples: Int
+            let motion_samples: Int
+        }
+        let sleep_records: [SleepRecord]?
         struct Signal: Codable, Identifiable {
             let id: String
             let title: String
@@ -46,6 +57,7 @@ struct DataQuality: Codable {
 struct DataQualityView: View {
     let quality: DataQuality
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("ring.diagnostics.inspect-next-sync") private var inspectNextSync = true
     private func date(_ at: Double) -> String {
         Date(timeIntervalSince1970: at).formatted(date: .abbreviated, time: .shortened)
     }
@@ -56,11 +68,17 @@ struct DataQualityView: View {
                     Text("Snapshot: \(date(quality.generated_at))").font(.caption).foregroundStyle(Obs.muted)
                     batteryCard
                     coverageCard
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Read-only ring mode check").font(.headline)
+                        Text(inspectNextSync ? "Queued for your next manual sync or pull-to-refresh." : "Use this to request another one-time check during a manual sync.")
+                        Button("Queue mode check") { inspectNextSync = true }.disabled(inspectNextSync)
+                        Text("Reads daytime HR, exercise HR, SpO₂ and raw-sampler status. Makes no setting changes. Responses appear in Technical reports; four reads may add up to 12 seconds to that sync.").font(.footnote).foregroundStyle(Obs.muted)
+                    }.foregroundStyle(Obs.ink).obsCard()
                     Text(quality.scope).font(.footnote).foregroundStyle(Obs.muted)
                     ShareLink(item: quality.exportText) {
                         Label("Share diagnostic summary", systemImage: "square.and.arrow.up")
                     }.font(.headline)
-                    Text("Shares the counts, timestamps and battery observations shown here. Raw ring records, pairing keys and your profile are not included.")
+                    Text("Shares the counts, timestamps, sleep-record summaries and battery observations shown here. Raw ring records, pairing keys and your profile are not included.")
                         .font(.footnote).foregroundStyle(Obs.muted)
                 }.padding(20)
             }.background(Obs.paper)
@@ -98,6 +116,16 @@ struct DataQualityView: View {
                 Text(signal.title).font(.subheadline.bold())
                 Text("\(signal.bins) bins with data · \(signal.outside_sleep_bins) outside recorded sleep")
                     .font(.subheadline).foregroundStyle(Obs.ink2)
+            }
+            DisclosureGroup("Sleep-record details") {
+                ForEach(Array((quality.coverage.sleep_records ?? []).enumerated()), id: \.offset) { _, record in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(date(record.end_at)).font(.subheadline.bold())
+                        Text(String(format: "%.0f min · source %@", record.duration_min, record.source ?? "none"))
+                        Text(record.explanation)
+                        Text("Usable HR: \(record.usable_hr_samples) · HRV: \(record.hrv_samples) · movement: \(record.motion_samples)")
+                    }.font(.footnote).padding(.vertical, 6)
+                }
             }
             Text(quality.coverage.message).font(.footnote).foregroundStyle(Obs.muted)
             DisclosureGroup("Daytime stress feasibility") {

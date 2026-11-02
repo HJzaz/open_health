@@ -560,6 +560,14 @@ impl RingSession {
         &self, db_path: String, key_hex: String, request_sleep_analysis: bool,
         progress: Box<dyn SyncProgressListener>,
     ) -> Result<SyncReport, SyncError> {
+        self.sync_with_diagnostics(db_path, key_hex, request_sleep_analysis, false, progress).await
+    }
+
+    /// Optional one-shot read-only inspection; automatic sync callers leave it off.
+    pub async fn sync_with_diagnostics(
+        &self, db_path: String, key_hex: String, request_sleep_analysis: bool,
+        inspect_modes: bool, progress: Box<dyn SyncProgressListener>,
+    ) -> Result<SyncReport, SyncError> {
         let mut stop = self.stop.subscribe();
         if let Some(reason) = stop.borrow().clone() {
             return Err(SyncError::Interrupted { reason });
@@ -568,7 +576,7 @@ impl RingSession {
             biased;
             _ = stop.changed() => Err(SyncError::Interrupted {
                 reason: stop.borrow().clone().unwrap_or_else(|| "cancelled".into()) }),
-            result = self.sync_inner(db_path, key_hex, request_sleep_analysis, progress) => result,
+            result = self.sync_inner(db_path, key_hex, request_sleep_analysis, inspect_modes, progress) => result,
         }
     }
 
@@ -720,6 +728,7 @@ impl RingSession {
         db_path: String,
         key_hex: String,
         request_sleep_analysis: bool,
+        inspect_modes: bool,
         progress: Box<dyn SyncProgressListener>,
     ) -> Result<SyncReport, SyncError> {
         let fail = |e: String| SyncError::Failed(e);
@@ -758,7 +767,32 @@ impl RingSession {
         // sync rather than the next. Fire-and-forget: a refusal is not a sync failure.
         if request_sleep_analysis {
             progress.on_progress("sleep-request".into(), 0, 0);
-            let _ = client.check_sleep_analysis(false).await;
+            let response = match client.check_sleep_analysis(false).await {
+                Ok(raw) => format!("sleep-response raw=0x{raw:02x}; meaning firmware-dependent"),
+                Err(error) => format!("sleep-response error={error}; cooldown remains based on request"),
+            };
+            progress.on_progress(response, 0, 0);
+        }
+        if inspect_modes {
+            progress.on_progress("mode-inspection-start".into(), 0, 0);
+            use oura_protocol::protocol::feature;
+            for (name,id) in [("daytime_hr",feature::DAYTIME_HR),
+                ("exercise_hr",feature::EXERCISE_HR),("spo2",feature::SPO2)] {
+                let message = match tokio::time::timeout(std::time::Duration::from_secs(3), client.feature_status(id)).await {
+                    Ok(Ok(s)) if s.feature == id => format!("mode-read {name} feature=0x{id:02x} mode=0x{:02x} status=0x{:02x} state=0x{:02x} subscription=0x{:02x}; read-only",s.mode,s.status,s.state,s.subscription),
+                    Ok(Ok(s)) => format!("mode-read {name} unexpected feature=0x{:02x}; not interpreted",s.feature),
+                    Ok(Err(e)) => format!("mode-read {name} error={e}"),
+                    Err(_) => format!("mode-read {name} timeout; no setting changed"),
+                };
+                progress.on_progress(message,0,0);
+            }
+            let message = match tokio::time::timeout(std::time::Duration::from_secs(3), client.rdata_state()).await {
+                Ok(Ok((tag,status))) => format!("mode-read raw_sampler subtag=0x{tag:02x} status=0x{status:02x}; read-only, firmware-dependent"),
+                Ok(Err(e)) => format!("mode-read raw_sampler error={e}"),
+                Err(_) => "mode-read raw_sampler timeout; no setting changed".into(),
+            };
+            progress.on_progress(message,0,0);
+            progress.on_progress("mode-inspection-end".into(),0,0);
         }
         let serial = client.serial().await.unwrap_or_else(|_| "unknown".into());
         let info = client.firmware().await.ok();

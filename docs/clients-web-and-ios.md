@@ -542,3 +542,24 @@ Rate is percentage points/day, not remaining-life prediction or causal attributi
 Phase one stops here: recovery scoring, daytime stress and workout recording
 remain later roadmap items. Physical-ring battery comparisons and a user-shared
 diagnostic report are still needed before concluding daytime feasibility.
+
+
+### Investigation diagnostics (0.1.11)
+Native BLE teardown retains its delegate for up to five seconds to observe the
+CoreBluetooth disconnect callback. Requested, confirmed, and unobserved are
+separate log events; suspension may delay callbacks and absence is not proof of
+an active radio link. Connection time is measured with monotonic uptime.
+Native sync logs early exits/cancellation and the actual background scheduler
+error. Sleep-processing raw responses/errors are logged, without interpreting
+firmware-dependent codes or changing the existing six-hour request throttle.
+A one-shot read-only mode inspection runs on the next manual/pull-to-refresh sync
+once per armed request, never automatic sync. Daytime HR, exercise HR, SpO2 and
+raw-sampler state reads each have a three-second timeout. Errors do not fail the
+history sync. No setters or raw-sampling start/stop commands are used. The phone
+Data & battery screen can re-arm the check; results are in Technical reports.
+The shared summary exports per-record staging reasons, duration, source and
+sample counts, displayed/exported by both clients. Short rests, insufficient HR,
+preserved partial staging and complete estimated coverage are distinguished.
+Native technical logs also include these record summaries. They do not establish
+clinical staging accuracy or a cause of signal loss. Phone-specific radio and
+scheduler diagnostics intentionally have no web BLE counterpart.

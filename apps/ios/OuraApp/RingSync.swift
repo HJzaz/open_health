@@ -631,7 +631,7 @@ final class RingSync: ObservableObject {
 
     @discardableResult
     func run(keyHex: String, maxAttempts: Int = 2, source: String = "manual") async -> SyncReport? {
-        guard !busy else { return nil }
+        guard !busy else { dlog("sync-exit", "source=\(source) reason=already-busy"); return nil }
         connectionIssue = nil
         lastReport = nil   // clear any prior success so a failed retry isn't read as one
         lastProgressBytes = nil
@@ -645,13 +645,16 @@ final class RingSync: ObservableObject {
             status = "key must be 32 hex characters"
             return nil
         }
-        guard WorkCoordinator.shared.syncAvailable else { status = "Sync paused. Open the app to resume."; return nil }
+        guard WorkCoordinator.shared.syncAvailable else { dlog("sync-exit", "run=\(runID) reason=unavailable-before-gate cancelled=\(Task.isCancelled)"); status = "Sync paused. Open the app to resume."; return nil }
         busy = true
         paused = false
         WorkCoordinator.shared.invalidateAnalysis()
         await WorkGate.shared.acquire()
         defer { Task { await WorkGate.shared.release() }; WorkCoordinator.shared.endCleanup() }
-        guard !paused, WorkCoordinator.shared.syncAvailable else { busy = false; return nil }
+        guard !paused, WorkCoordinator.shared.syncAvailable else {
+            dlog("sync-exit", "run=\(runID) reason=unavailable-after-gate paused=\(paused) cancelled=\(Task.isCancelled)")
+            busy = false; return nil
+        }
         markedIncompleteThisRun = false
         // A multi-hour first sync must not die because the screen locked; SyncView
         // refreshes this when the app becomes active again.
@@ -685,7 +688,10 @@ final class RingSync: ObservableObject {
         var attempt = 1
         let totalBudget = max(1, maxAttempts)
         while attempt <= totalBudget {
-            if paused || Task.isCancelled || !WorkCoordinator.shared.syncAvailable { status = "Sync paused. Return to the app to resume."; return nil }
+            if paused || Task.isCancelled || !WorkCoordinator.shared.syncAvailable {
+                dlog("sync-exit", "run=\(runID) reason=before-attempt paused=\(paused) cancelled=\(Task.isCancelled) syncAvailable=\(WorkCoordinator.shared.syncAvailable)")
+                status = "Sync paused. Return to the app to resume."; return nil
+            }
             attemptID = UUID().uuidString
             dlog("sync", "attempt=\(attempt) id=\(attemptID) run=\(runID)")
             if attempt > 1 {
@@ -758,6 +764,9 @@ final class RingSync: ObservableObject {
                 let expectedAttempt = attemptID
                 let progress = SyncProgressBridge { [weak self] stage, bytesLeft, events in
                     guard self?.attemptID == expectedAttempt, self?.busy == true, self?.paused == false else { return }
+                    if stage == "mode-inspection-start" {
+                        UserDefaults.standard.set(false, forKey: "ring.diagnostics.inspect-next-sync")
+                    }
                     if stage == "sleep-request" {
                         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastSleepRequestKey)
                     }
@@ -775,8 +784,12 @@ final class RingSync: ObservableObject {
                     now: Date(), hour: Calendar.current.component(.hour, from: Date()),
                     manual: source == "manual" || source == "pull-to-refresh")
                 dlog("battery", "sleep processing requested=\(requestSleep)")
-                let report = try await s.syncWithOptions(dbPath: DB.url.path, keyHex: key,
-                    requestSleepAnalysis: requestSleep, progress: progress)
+                let inspectModes = (source == "manual" || source == "pull-to-refresh") &&
+                    (UserDefaults.standard.object(forKey: "ring.diagnostics.inspect-next-sync") as? Bool ?? true)
+                if inspectModes { UserDefaults.standard.set(false, forKey: "ring.diagnostics.inspect-next-sync") }
+                dlog("sync-diagnostic", "run=\(runID) oneShotReadOnlyModes=\(inspectModes); mode query attempts require successful authentication")
+                let report = try await s.syncWithDiagnostics(dbPath: DB.url.path, keyHex: key,
+                    requestSleepAnalysis: requestSleep, inspectModes: inspectModes, progress: progress)
                 Keychain.saveKey(key)
                 rememberSerial(report.serial)
                 rememberPeripheral(t.connectedPeripheralID)
