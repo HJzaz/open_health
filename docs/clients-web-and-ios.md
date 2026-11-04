@@ -579,3 +579,25 @@ caused error 3, and does not promise iOS will schedule background execution.
 These native lifecycle fixes have no web counterpart; measurement modes, sync
 throttles and shared health calculations are unchanged. Device verification of
 refresh, disconnect callbacks and a single-version battery baseline is required.
+
+### Native history sleep/flush policy experiment (0.1.13)
+The pinned upstream library sends `28 01 00` before each history batch as
+DataFlush, but its protocol also defines those exact bytes as the non-forced
+sleep-analysis request. Earlier native logs saying sleep processing was not
+requested only described the explicit call and did not cover these batch writes.
+The opcode's actual firmware behavior and battery cost remain unproven.
+
+A vendored, pinned oura-link copy adds a history-only drain path without those
+batch requests. Native drains, recovery passes and cursor-marker probes use it;
+the separate explicit request retains the existing six-hour/daytime policy.
+Logs identify this policy. No automatic flush fallback is attempted, so a device
+failure remains visible instead of silently invalidating the battery experiment.
+Batch terminator validation, database transactions, cursor checkpoints, stale
+cursor recovery and retry limits remain in place.
+
+The CLI/web transport keeps the original drain behavior. This is an intentional
+native-only battery investigation, not a change to shared health calculations.
+Protocol mocks cover extended multi-batch history and legacy fallback without
+the opcode; native store tests reject any hidden sleep/flush writes. Physical
+Ring 4 history continuity and battery response still need device verification.
+The background scheduler identifier mismatch remains unchanged for this comparison.

@@ -36,7 +36,9 @@ jobs:
           key: iphone-ipa-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
           restore-keys: iphone-ipa-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-
       - name: Test shared Rust core
-        run: cargo test --locked -p oura-core -p oura-summary
+        run: |
+          cargo test --locked -p oura-link --no-default-features
+          cargo test --locked -p oura-core -p oura-summary
       - name: Build Rust iOS framework
         run: bash apps/ios/build-xcframework.sh
       - name: Generate personal sideload project

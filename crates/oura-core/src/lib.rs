@@ -450,7 +450,7 @@ async fn drain_into_store(
     let batch = Mutex::new(Vec::new());
     let checkpoint = AtomicU32::new(cursor);
     let outcome = client
-        .drain_events(
+        .drain_events_without_flush(
             cursor,
             |ev| {
                 batch.lock().unwrap().push(ev.clone());
@@ -502,7 +502,7 @@ async fn cursor_marker_present(
         return Ok(true);
     }
     let outcome = client
-        .drain_events(cursor - 1, |_| true, |_| true)
+        .drain_events_without_flush(cursor - 1, |_| true, |_| true)
         .await
         .map_err(|e| e.to_string())?;
     Ok(outcome.events_synced > 0 && outcome.next_cursor >= cursor)
@@ -794,6 +794,11 @@ impl RingSession {
             progress.on_progress(message,0,0);
             progress.on_progress("mode-inspection-end".into(),0,0);
         }
+        progress.on_progress(
+            "history-policy repeatedSleepFlush=false; sleep/flush opcode only sent by explicit throttled request".into(),
+            0,
+            0,
+        );
         let serial = client.serial().await.unwrap_or_else(|_| "unknown".into());
         let info = client.firmware().await.ok();
 
@@ -1221,7 +1226,7 @@ mod raw_event_tests {
                 let tx = self.tx.clone();
                 match data.first().copied() {
                     Some(0x28) => {
-                        let _ = tx.send(vec![0x29, 0x01, 0x00]);
+                        panic!("native history drain bypassed the explicit sleep/flush throttle");
                     }
                     Some(0x2f) => {
                         // Unsupported ExtGetEvent -> fall back to legacy GetEvent (0x10)
@@ -1288,7 +1293,7 @@ mod raw_event_tests {
                 let tx = self.tx.clone();
                 match data.first().copied() {
                     Some(0x28) => {
-                        let _ = tx.send(vec![0x29, 0x01, 0x00]);
+                        panic!("native recovery drain bypassed the explicit sleep/flush throttle");
                     }
                     Some(0x2f) => {
                         let _ = tx.send(vec![0x2f, 0x02, 0x00, 0x41]);
